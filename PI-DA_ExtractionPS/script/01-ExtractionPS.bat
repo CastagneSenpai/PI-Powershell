@@ -1,0 +1,2 @@
+cd ..
+powershell.exe -file .\ExtractionPS.ps1 -PIServerHost "[PISERVERHOST]" -Starttime "[YYYY-MM-DDThh:mm:ss]" -Endtime "[YYYY-MM-DDThh:mm:ss]" -output "[pathOutputFolder] -doCompress -doCompressAll -noEmptyFile
