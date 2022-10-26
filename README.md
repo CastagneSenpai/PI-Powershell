@@ -1,2 +1,2 @@
 # PI-Powershell-Toolbox
-Total's PowerShell toolbox for OSISoft PI.
+Personal PowerShell toolbox for OSISoft/AVEVA PI.
