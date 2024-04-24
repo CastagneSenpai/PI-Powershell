@@ -32,18 +32,7 @@
 
 .NOTES
     Authors: 
-        - Jonathan BARON <j.baron@cgi.com>
-        - Anthony SABATHIER <anthony.sabathier@totalenergies.com>
-    Version: 2.3
-    Date: 2021-12-06
-    Improvements: 
-        - Fallback to standard windows compression if no 7zip installed
-        - Remove adaptations for PowerShell v2.0 after SPIN'UP project
-        - Add size check so see if next backup will fail
-		- Remove Event Frame backup (just need a backfilling to regenerate them if needed)
-    Changes:
-        - v2.2 - Worked on retention actions to avoid issue with relative path
-        - v2.3 - Changed mail domain to totalenergies.com, Add patch for nigeria on database name, Changed default log folder and create it if missing
+        - Romain CASTAGNÉ - CGI
 #>
 param (
     [Parameter(Mandatory=$True)][string]$AFServerName,
