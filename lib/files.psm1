@@ -89,6 +89,64 @@ Function compress-ZipAllFolder([string] $outputFolder, [string] $name)
     }
 }
 
+# 
+# $file = Select-FileDialog -Title "Select a file"
+function Select-FileDialog {
+    param(
+        [string]$Title = "Select a file",            
+        [string]$Directory = [System.Environment]::GetFolderPath('Desktop'), 
+        [string]$Filter = "All Files (*.*)|*.*"     
+    )
+
+    # Charger l'assembly nécessaire pour utiliser les boîtes de dialogue Windows Forms
+    [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null
+
+    # Créer un objet OpenFileDialog pour la sélection de fichiers
+    $objForm = New-Object System.Windows.Forms.OpenFileDialog
+    $objForm.InitialDirectory = $Directory
+    $objForm.Filter = $Filter
+    $objForm.Title = $Title
+
+    # Afficher la boîte de dialogue et récupérer le résultat
+    $Show = $objForm.ShowDialog()
+
+    # Vérifier si l'utilisateur a sélectionné un fichier
+    if ($Show -eq [System.Windows.Forms.DialogResult]::OK) {
+        return $objForm.FileName             
+    } else {
+        Write-Output "Operation cancelled by user."  
+    }
+}
+
+
+function Select-FolderDialog {
+    param(
+        [string]$Title = "Select a repository",
+        [string]$RootFolder = [System.Environment+SpecialFolder]::Desktop
+    )
+    
+    # Charger l'assembly nécessaire pour utiliser les boîtes de dialogue
+    [System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null
+
+    # Créer un objet FolderBrowserDialog
+    $objForm = New-Object System.Windows.Forms.FolderBrowserDialog
+    $objForm.Description = $Title
+    $objForm.RootFolder = $RootFolder
+    
+    # Afficher la boîte de dialogue
+    $Show = $objForm.ShowDialog()
+    
+    # Vérifier si l'utilisateur a sélectionné un répertoire
+    if ($Show -eq [System.Windows.Forms.DialogResult]::OK) {
+        return $objForm.SelectedPath
+    } else {
+        Write-Output "Operation cancelled by user."
+    }
+}
+
+
 Export-ModuleMember -Function Write-PITagData
 Export-ModuleMember -Function compress-ZipFolder
 Export-ModuleMember -Function compress-ZipAllFolder
+Export-ModuleMember -Function Select-FileDialog
+Export-ModuleMember -Function Select-FolderDialog

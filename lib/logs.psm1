@@ -1,59 +1,80 @@
 # Exemples d'utilisation :
-    # Write-Log -v_LogFile $v_LogPathfile -v_LogLevel SUCCESS -v_ConsoleOutput -v_Message "Ceci est un message de succes"
-    # Write-Log -v_LogFile $v_LogPathfile -v_LogLevel INFO -v_ConsoleOutput -v_Message "Ceci est un message d'information"
-    # Write-Log -v_LogFile $v_LogPathfile -v_LogLevel WARN -v_ConsoleOutput -v_Message "Ceci est un message d'avertissement"
-    # Write-Log -v_LogFile $v_LogPathfile -v_LogLevel ERROR -v_ConsoleOutput -v_Message "Ceci est un message d'erreur"
-    # Write-Log -v_LogFile $v_LogPathfile -v_LogLevel DEBUG -v_ConsoleOutput -v_Message "Ceci est un message de debug"
-    # Write-EmptyLine -v_LogFile $v_LogPathfile
+# Write-Log -v_LogFile $LogPathFile -v_LogLevel SUCCESS -ConsoleOutput -v_Message "Ceci est un message de succès"
+# Write-Log -v_LogFile $LogPathFile -v_LogLevel INFO -ConsoleOutput -v_Message "Ceci est un message d'information"
+# Write-Log -v_LogFile $LogPathFile -v_LogLevel WARN -ConsoleOutput -v_Message "Ceci est un message d'avertissement"
+# Write-Log -v_LogFile $LogPathFile -v_LogLevel ERROR -ConsoleOutput -v_Message "Ceci est un message d'erreur"
+# Write-Log -v_LogFile $LogPathFile -v_LogLevel DEBUG -ConsoleOutput -v_Message "Ceci est un message de debug"
+# Write-EmptyLine -v_LogFile $LogPathFile
 
 Param(
- [string]$v_LogDir
+    [string]$LogDir = (Join-Path (Get-Location) "Logs")
 )
 
-Function Write-Log(
-[string[]]$v_Message, 
-[string]$v_Logfile, 
-[switch]$v_ConsoleOutput, 
-[ValidateSet("SUCCESS", "INFO", "WARN", "ERROR", "DEBUG")]
-[string]$v_LogLevel) {
- 
- If (!$v_LogLevel) { $v_LogLevel = "INFO" }
+Function Write-Log {
+    [CmdletBinding()]
+    Param(
+        [string]$v_Message,
+        [string]$v_LogFile = (Join-Path -Path $LogDir -ChildPath ((Get-Date -Format yyyy-MM-dd) + "_Logs.txt")),
+        [switch]$v_ConsoleOutput,
+        [ValidateSet("SUCCESS", "INFO", "WARN", "ERROR", "DEBUG")]
+        [string]$v_LogLevel = "INFO"
+    )
 
- switch ($v_LogLevel) {
-  SUCCESS { $v_Color = "Green" } 
-  INFO { $v_Color = "White" } 
-  WARN { $v_Color = "Yellow" } 
-  ERROR { $v_Color = "Red" } 
-  DEBUG { $v_Color = "Gray" } 
- }
+    Begin {
+        # Define log levels color
+        $colorMap = @{
+            "SUCCESS" = "Green"
+            "INFO"    = "White"
+            "WARN"    = "Yellow"
+            "ERROR"   = "Red"
+            "DEBUG"   = "Gray"
+        }
+        $timeStamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        $color = $colorMap[$v_LogLevel]
+        if (!(Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir }
+    }
 
- if ($v_Message -ne $null -and $v_Message.Length -gt 0) { 
+    Process {
+        if ($v_Message) {
+            $logEntry = "[$timeStamp] [$v_LogLevel] :: $v_Message"
 
-  $v_TimeStamp = [System.DateTime]::Now.ToString("yyyy-MM-dd HH:mm:ss")
+            try {
+                if ($v_LogFile) {
+                    Out-File -Append -FilePath $v_LogFile -InputObject $logEntry
+                }
 
-  if ($v_Logfile -ne $null -and $v_Logfile -ne [System.String]::Empty) {
-   Out-File -Append -FilePath $v_Logfile -InputObject "[$v_TimeStamp] [$v_LogLevel] :: $v_Message"
-  }
-
-  if ($v_ConsoleOutput -eq $true){
-   Write-Host "[$v_TimeStamp] [$v_LogLevel] :: $v_Message" -ForegroundColor $v_Color 
-  } 
- }
+                if ($v_ConsoleOutput.IsPresent) {
+                    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                    Write-Host $logEntry -ForegroundColor $color
+                }
+            }
+            catch {
+                Write-Error "Failed to write log: $_"
+            }
+        }
+    }
 }
 
-If ($v_LogDir -eq "") {[string]$v_LogDir = Get-Location}
-$v_LogPathfile = $v_LogDir + "\" + (Get-Date -Format yyyy-MM-dd) + "_Logs.txt"
+Function Write-EmptyLine {
+    [CmdletBinding()]
+    Param(
+        [string]$v_LogFile
+    )
 
+    Process {
+        try {
+            Write-Host ""  # Empty line
 
-Function Write-EmptyLine(
-    [string]$v_Logfile) {
-        Write-Host "" #EmptyLine
-        if ($v_Logfile -ne $null -and $v_Logfile -ne [System.String]::Empty) {
-            Out-File -Append -FilePath $v_Logfile -InputObject "" #EmptyLine
+            if ($v_LogFile) {
+                Out-File -Append -FilePath $v_LogFile -InputObject ""  # Empty line
+            }
         }
+        catch {
+            Write-Error "Failed to write empty line: $_"
+        }
+    }
+}
 
-    } 
-
-
+# Export functions
 Export-ModuleMember -Function Write-Log
 Export-ModuleMember -Function Write-EmptyLine
