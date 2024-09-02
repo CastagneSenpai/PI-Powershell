@@ -16,34 +16,36 @@ function New-Repositories{
         $userPath
     )
 
-        # CREATION DU REPERTOIRE RACINE DE L'UTILISATEUR
+    # CREATION DU REPERTOIRE RACINE DE L'UTILISATEUR
+    try {
+        $directory = New-Item -Path $userPath -ItemType Directory -ErrorAction Stop | Out-Null
+        if ($directory -and $directory.PSIsContainer) {
+            Write-Log -v_Message "Répertoire utilisateur créé à l'emplacement $userPath" -v_ConsoleOutput -v_LogLevel "SUCCESS"
+        }
+    } catch {
+        Write-Log -v_Message "Erreur lors de la création du répertoire utilisateur à l'emplacement $userPath : $_" -v_ConsoleOutput -v_LogLevel "ERROR"
+    }
+    
+    # CREATION DES SOUS REPERTOIRES
+    foreach ($folder in $folders) {
         try {
-            $directory = New-Item -Path $userPath -ItemType Directory -ErrorAction Stop | Out-Null
-            if ($directory -and $directory.PSIsContainer) {
-                Write-Log -v_Message "Répertoire utilisateur créé à l'emplacement $userPath" -v_ConsoleOutput -v_LogLevel "SUCCESS"
-            }
+            $folderPath = [System.Text.Encoding]::UTF8.GetString([System.Text.Encoding]::UTF8.GetBytes((Join-Path -Path $userPath -ChildPath $folder)))
+            New-Item -Path $folderPath -ItemType Directory -ErrorAction Stop | Out-Null
+            Write-Log -v_Message "Dossier $folder cree a l'emplacement $folderPath" -v_ConsoleOutput -v_LogLevel "SUCCESS"
         } catch {
-            Write-Log -v_Message "Erreur lors de la création du répertoire utilisateur à l'emplacement $userPath : $_" -v_ConsoleOutput -v_LogLevel "ERROR"
+            Write-Log -v_Message "Erreur lors de la création du dossier $folder à l'emplacement $folderPath : $_" -v_ConsoleOutput -v_LogLevel "ERROR"
+            exit
         }
-        
-        # CREATION DES SOUS REPERTOIRES
-        foreach ($folder in $folders) {
-            try {
-                $folderPath = [System.Text.Encoding]::UTF8.GetString([System.Text.Encoding]::UTF8.GetBytes((Join-Path -Path $userPath -ChildPath $folder)))
-                New-Item -Path $folderPath -ItemType Directory -ErrorAction Stop | Out-Null
-                Write-Log -v_Message "Dossier $folder cree a l'emplacement $folderPath" -v_ConsoleOutput -v_LogLevel "SUCCESS"
-            } catch {
-                Write-Log -v_Message "Erreur lors de la création du dossier $folder à l'emplacement $folderPath : $_" -v_ConsoleOutput -v_LogLevel "ERROR"
-                exit
-            }
-        }
-         
+    }
+     
 }
+
 function Copy-Content{
     param (
         $userPath,
         $sourcesPath
     )
+
     $folders = Get-ChildItem -path $userPath
 
     try{
@@ -57,24 +59,37 @@ function Copy-Content{
     }
     
 }
-function Set-GitRepository{
-    param(
-        [string]$userPath        
+
+function Update-Content {
+    param (
+        $userPath,
+        $sourcesPath
     )
-    Set-Location -Path $userPath | Out-Null
-    git init | Out-Null
-    git add . | Out-Null
-    git commit -m "Initial commit with base folders" | Out-Null
-    Write-Log -v_Message "Depot git initialise dans le repertoire $userPath."  -v_ConsoleOutput -v_LogLevel "SUCCESS"
+    try {
+        Write-Log -v_Message "Mise à jour du contenu dans $userPath." -v_ConsoleOutput -v_LogLevel "INFO"
+        Robocopy $sourcesPath $userPath /MIR /Z /NFL /NDL /NP /XO  # /XO permet de ne copier que les fichiers plus récents ou non existants
+        Write-Log -v_Message "Mise à jour terminée avec succès dans $userPath." -v_ConsoleOutput -v_LogLevel "SUCCESS"
+    } catch {
+        Write-Log -v_Message "Erreur lors de la mise à jour dans $userPath : $_" -v_ConsoleOutput -v_LogLevel "ERROR"
+    }
 }
 
 function Main {
     $userPath = Join-Path -Path $basePath -ChildPath $username
     $foldersToCreate = @("01_Espace_Formation", "02_Espace_Documents", "03_Espace_Projets", "04_Espace_Personnel")
 
-    New-Repositories -folders $foldersToCreate -userPath $userPath
-    Copy-Content -sourcesPath $sourcesPath -userPath $userPath
-    # Set-GitRepository -userPath $userPath    ### Ne sera pas utilisé car les sous répertoires possèdent des gits pour les projets de dev.
+    if (Test-Path $userPath) {
+        Write-Log -v_Message "L'utilisateur $username existe déjà." -v_ConsoleOutput -v_LogLevel "WARNING"
+        $response = Read-Host "Souhaitez-vous mettre à jour l'arborescence de l'utilisateur ? (Y/N)"
+        if ($response -eq "Y") {
+            Update-Content -userPath $userPath -sourcesPath $sourcesPath
+        } else {
+            Write-Log -v_Message "Aucune action n'a été entreprise." -v_ConsoleOutput -v_LogLevel "INFO"
+        }
+    } else {
+        New-Repositories -folders $foldersToCreate -userPath $userPath
+        Copy-Content -sourcesPath $sourcesPath -userPath $userPath
+    }
 }
 
 Main -username $username

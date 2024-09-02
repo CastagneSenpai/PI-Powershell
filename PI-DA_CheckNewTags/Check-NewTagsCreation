@@ -1,0 +1,78 @@
+<#
+    .SYNOPSIS
+    Script pour surveiller les nouveaux tags PI sur un serveur spécifique.
+
+    .DESCRIPTION
+    Ce script se connecte à un serveur PI spécifié et surveille les nouveaux tags créés depuis la dernière exécution.
+    Les tags nouvellement détectés sont affichés avec un horodatage. Le nombre total de tags n'est affiché
+    que s'il y a de nouveaux tags détectés.
+
+    .PARAMETER ServerName
+    Nom du serveur PI auquel se connecter. Par défaut "ACCNRAPIDTAW01P".
+
+    .EXAMPLE
+    .\MonitorPITags.ps1 -ServerName "MonServeurPI"
+
+    .NOTES
+    Auteur   : Romain CASTAGNÉ
+    Société  : CGI
+    Contact  : romain.castagne@cgi.com
+    Version  : 1.0
+    Date     : 2024-09-02
+
+#>
+
+param(
+    [string]$ServerName = "ACCNRAPIDTAW01P"
+)
+
+Clear-Host
+
+# Créer une instance de l'objet PI SDK
+$piSDK = New-Object -ComObject PISDK.PISDK
+$piServer = $piSDK.Servers.Item($ServerName)
+
+# Stocker les noms des tags de la dernière itération
+$previousTags = @{}
+$firstRun = $true
+
+While($true)
+{
+    # Récupérer les points PI
+    $currentTags = @{}
+    $counter = 0
+
+    foreach ($point in $piServer.PIPoints) {
+        $tagName = $point.Name
+        $currentTags[$tagName] = $true
+        $Counter += 1
+    }
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    
+    if ($firstRun) {
+        Write-Output "$timestamp - Première itération, total des tags : $counter"
+    } else {
+        # Trouver les nouveaux tags par rapport à la dernière itération
+        $newTags = $currentTags.Keys | Where-Object { -not $previousTags.ContainsKey($_) }
+
+        if ($newTags.Count -gt 0) {
+            Write-Output "$timestamp - Nouveaux tags détectés :"
+            foreach ($tag in $newTags) {
+                Write-Output " - $tag"
+            }
+            Write-Output "$timestamp - Nombre total de tags = $counter"
+        } else {
+            # Ne rien afficher si aucun nouveau tag n'est détecté
+        }
+    }
+
+    # Mettre à jour les tags précédents
+    $previousTags = $currentTags
+
+    # Passer à la prochaine itération
+    $firstRun = $false
+
+    # Attendre 15 secondes avant la prochaine itération
+    Start-Sleep -Seconds 15
+}
