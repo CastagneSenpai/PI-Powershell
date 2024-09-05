@@ -1,31 +1,3 @@
-<#
-.SYNOPSIS
-    Script de backup des répertoires utilisateurs avec gestion des tâches planifiées.
-
-.DESCRIPTION
-    Ce script PowerShell réalise une sauvegarde des répertoires utilisateurs en les compressant au format ZIP, puis nettoie les anciennes sauvegardes. Il vérifie également la présence d'une tâche planifiée pour exécuter le script régulièrement et la crée si nécessaire.
-
-.NOTES
-    Auteur     : Romain Castagné
-    Société    : CGI
-    Date       : 22 Août 2024
-    Version    : 1.0
-
-.PARAMETER SourceDir
-    Répertoire source contenant les dossiers utilisateurs à sauvegarder.
-
-.PARAMETER BackupDir
-    Répertoire de destination pour les fichiers ZIP de sauvegarde.
-
-.PARAMETER DaysToKeep
-    Nombre de jours pendant lesquels les fichiers ZIP de sauvegarde doivent être conservés.
-
-.EXAMPLE
-    .\Backup-folders.ps1 -SourceDir "E:\01_ESPACE_UTILISATEURS" -BackupDir "E:\00_ESPACE_ADMIN\02_GESTION DES UTILISATEURS\03_BACKUP_DES_ESPACES" -DaysToKeep 5
-
-    Lance le script pour sauvegarder les répertoires utilisateurs, en conservant les sauvegardes pour une durée de 5 jours.
-#>
-
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) { Start-Process powershell.exe "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs; exit }
 
 # Import de la fonction Write-Log
@@ -97,6 +69,7 @@ Function Install-ScheduledTask {
     }
 }
 
+# Fonction principale
 Function Main {
     param (
         [string]$SourceDir = "E:\01_ESPACE_UTILISATEURS",
