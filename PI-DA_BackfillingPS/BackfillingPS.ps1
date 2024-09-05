@@ -26,16 +26,16 @@ Version: 2.0
 #>
 
 Param(
-    [Parameter(Mandatory=$True, HelpMessage="Name of the PI Server to extract data")]
+    [Parameter(Mandatory=$False, HelpMessage="Name of the PI Server to extract data")]
     [String]$PISourceServer = 'PISRV01',
 
-    [Parameter(Mandatory=$True, HelpMessage="Name of the PI Server to insert data")]
+    [Parameter(Mandatory=$False, HelpMessage="Name of the PI Server to insert data")]
     [String]$PITargetServer = 'PISRV02',
 
-    [Parameter(Mandatory=$True, HelpMessage="Start time of extraction (Format : yyyy-MM-ddThh:mm)")]
+    [Parameter(Mandatory=$False, HelpMessage="Start time of extraction (Format : yyyy-MM-ddThh:mm)")]
     [String]$DateStartTime = ((Get-Date).AddMonths(-1).ToString('yyyy-MM-ddTHH:mm')),
 
-    [Parameter(Mandatory=$True, HelpMessage="End time of extraction (Format : yyyy-MM-ddThh:mm)")]
+    [Parameter(Mandatory=$False, HelpMessage="End time of extraction (Format : yyyy-MM-ddThh:mm)")]
     [String]$DateEndTime = (Get-Date).ToString('yyyy-MM-ddTHH:mm')
 )
 
