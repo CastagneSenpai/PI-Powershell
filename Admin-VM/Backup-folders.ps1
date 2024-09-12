@@ -88,10 +88,10 @@ Function Main {
 
         # Création d'un fichier zip du répertoire utilisateur
         Compress-Folder -FolderPath $userDir -DestinationPath $BackupDir
-
-        # Nettoyage des anciens fichiers dans le répertoire de backup
-        Remove-OldBackups -BackupDir $BackupDir -DaysToKeep $DaysToKeep
     }
+    
+    # Nettoyage des anciens fichiers dans le répertoire de backup
+    Remove-OldBackups -BackupDir $BackupDir -DaysToKeep $DaysToKeep
 
     Write-Log -v_Message "Backup process completed successfully." -v_LogLevel "SUCCESS" -v_ConsoleOutput
 }
