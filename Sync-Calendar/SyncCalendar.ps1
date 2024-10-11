@@ -1,126 +1,115 @@
-# Fonction pour verifier si une tâche planifiee existe
-function Check-ScheduledTaskExists {
-    param (
-        [string]$TaskName
-    )
+<#
+.SYNOPSIS
+    Script PowerShell pour synchroniser les événements du calendrier romain.castagne-ext@syensqo.com avec le calendrier principal Outlook.
+
+.DESCRIPTION
+    Ce script récupère les événements du calendrier spécifié dans "Internet Calendars" et les ajoute au calendrier principal Outlook.
+    Il vérifie si les événements existent déjà pour éviter les doublons et enregistre les événements créés dans un fichier log.
+
+.PARAMETER CalendarEmail
+    Adresse e-mail du calendrier Internet à récupérer.
+
+.PARAMETER LogPath
+    Chemin du fichier log où les événements créés et les erreurs seront enregistrés.
+
+.EXAMPLE
+    .\SyncCalendar.ps1 -CalendarEmail "romain.castagne-ext@syensqo.com" -LogPath "C:\Scripts\log.txt"
+    Exécute le script en synchronisant le calendrier spécifié et en enregistrant les logs dans le fichier spécifié.
+
+.NOTES
+    Auteur: Romain Castagné
+    Version: 1.0
+    Date: $(Get-Date -Format "yyyy-MM-dd")
+    Tâche planifiée: Update SYENSQO Calendar.xml doit être importée dans le planificateur de tâches avec l'adresse de calendrier Outlook appropriée.
+#>
+
+param (
+    [string]$CalendarEmail = "romain.castagne-ext@syensqo.com",
+    [string]$LogPath = (Join-Path $PSScriptRoot "log.txt")
+)
+
+try {
     
-    try {
-        $task = Get-ScheduledTask | Where-Object { $_.TaskName -eq $TaskName }
-        return $task -ne $null
-    } catch {
-        Write-Host "Erreur lors de la verification de la tâche planifiee : $_"
-        return $false
+    # Démarrer Outlook
+    while (-not (Get-Process -Name "OUTLOOK" -ErrorAction SilentlyContinue)) {
+        Add-Content -path $LogPath -value "Ouverture de Outlook en cours ..."
+        Start-Sleep -Seconds 2
     }
-}
-
-# Vérifie si le script est exécuté avec des droits administratifs
-if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    # Relance le script avec des droits administratifs
-    Start-Process PowerShell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Path)`"" -Verb RunAs
-    exit
-}
-
-# Si la tâche planifiee n'existe pas, la creer
-$taskName = "Update SYENSQO Calendar"
-
-if (-not (Check-ScheduledTaskExists $taskName)) {
-    Write-Host "La tâche planifiee '$taskName' n'existe pas, creation en cours..."
-
-    # Creer une nouvelle tâche planifiee avec un declencheur au demarrage et une repetition
-    $action = New-ScheduledTaskAction -Execute "Powershell.exe" -Argument "-ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -File 'C:\Scripts\SyncCalendar.ps1'"
-    $trigger = New-ScheduledTaskTrigger -AtStartup
-
-    $principal = New-ScheduledTaskPrincipal -UserId "S-1-5-21-3641078771-3653456904-245653651-1325287" -LogonType Interactive -RunLevel Highest
-
-    # Enregistrer la tâche
-    Register-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -TaskName $taskName -Description "Mise a jour du calendrier SYENSQO"
-
-    Write-Host "Tâche planifiee '$taskName' creee avec succes."
-} else {
-    Write-Host "La tâche planifiee '$taskName' existe deja."
-}
-
-# ------------------- Suite du script existant -------------------
-
-# Creer une instance de l'application Outlook
-$Outlook = New-Object -ComObject Outlook.Application
-$Namespace = $Outlook.GetNamespace("MAPI")
-
-# Acceder au dossier "Internet Calendars"
-$internetCalendars = $Namespace.Folders.Item("Internet Calendars")
-
-# Verifier si le dossier est bien recupere
-if ($internetCalendars -eq $null) {
-    Write-Host "Le dossier 'Internet Calendars' n'a pas ete trouve."
-    exit
-}
-
-# Acceder au calendrier dans le dossier "Internet Calendars"
-$calendar = $internetCalendars.Folders.Item("romain.castagne-ext@syensqo.com") # Nom du calendrier
-
-# Verifier si le calendrier est bien recupere
-if ($calendar -eq $null) {
-    Write-Host "Le calendrier specifie dans 'Internet Calendars' n'a pas ete trouve."
-    exit
-}
-
-# Recuperer tous les elements du calendrier, sans filtrer par date
-$items = $calendar.Items
-$items.IncludeRecurrences = $true
-
-# Trier les elements par date de debut
-$items.Sort("[Start]")
-
-# Acceder au calendrier principal dans Outlook pour ajouter des evenements
-$mainCalendar = $Namespace.GetDefaultFolder(9) # 9 correspond au calendrier principal
-
-# Recuperer les elements du calendrier principal
-$mainCalendarItems = $mainCalendar.Items
-$mainCalendarItems.IncludeRecurrences = $true
-
-# Trier les elements du calendrier principal par date de debut
-$mainCalendarItems.Sort("[Start]")
-
-# Creer des evenements dans le calendrier principal a partir des elements recuperes
-foreach ($item in $items) {
-    # Verifier si l'evenement existe deja dans le calendrier principal
-    $eventExists = $false
-    foreach ($mainItem in $mainCalendarItems) {
-        # Comparer le sujet, la date de debut et la date de fin
-        if ($mainItem.Subject -eq "SYENSQO meeting" -and $mainItem.Start -eq $item.Start -and $mainItem.End -eq $item.End) {
-            $eventExists = $true
-            break
+    
+    # Créer une instance de l'application Outlook
+    $Outlook = New-Object -ComObject Outlook.Application
+    $Namespace = $Outlook.GetNamespace("MAPI")
+    
+    # Accéder au dossier "Internet Calendars"
+    $internetCalendars = $Namespace.Folders.Item("Internet Calendars")
+    
+    # Vérifier si le dossier est bien récupéré
+    if ($null -eq $internetCalendars) {
+        Add-Content -path $LogPath -value "Le dossier 'Internet Calendars' n'a pas été trouvé."
+        exit
+    }
+    
+    # Accéder au calendrier dans le dossier "Internet Calendars"
+    $calendar = $internetCalendars.Folders.Item($CalendarEmail) # Utiliser le paramètre CalendarEmail
+    
+    # Vérifier si le calendrier est bien récupéré
+    if ($null -eq $calendar) {
+        Add-Content -path $LogPath -value "Le calendrier spécifié dans 'Internet Calendars' n'a pas été trouvé."
+        exit
+    }
+    
+    # Récupérer tous les éléments du calendrier, sans filtrer par date
+    $items = $calendar.Items | Where-Object { $_.Start -gt (Get-Date).AddDays(-1)} | Sort-Object Start
+    
+    # Accéder au calendrier principal dans Outlook pour ajouter des événements
+    $mainCalendar = $Namespace.GetDefaultFolder(9) # 9 correspond au calendrier principal
+    
+    # Récupérer les éléments du calendrier principal
+    $mainCalendarItems = $mainCalendar.Items | Sort-Object Start
+    
+    # Créer des événements dans le calendrier principal à partir des éléments récupérés
+    foreach ($item in $items) {
+        # Vérifier si l'événement existe déjà dans le calendrier principal
+        $eventExists = $false
+        foreach ($mainItem in $mainCalendarItems) {
+            if ($mainItem.Subject -eq "SYENSQO meeting" -and $mainItem.Start -eq $item.Start -and $mainItem.End -eq $item.End) {
+                $eventExists = $true
+                break
+            }
         }
-    }
-
-    # Si l'evenement n'existe pas, on le cree
-    if (-not $eventExists) {
-        # Creer une reunion
-        $newMeeting = $mainCalendarItems.Add(1) # 1 pour un rendez-vous
-
-        # Renommer l'evenement si le sujet est "Busy"
-        if ($item.Subject -eq "Busy") {
-            $newMeeting.Subject = "SYENSQO meeting"
+    
+        # Si l'événement n'existe pas, on le crée
+        if (-not $eventExists) {
+            # Créer une réunion
+            $newMeeting = $Outlook.CreateItem(1) # 1 pour un rendez-vous
+    
+            # Renommer l'événement si le sujet est "Busy"
+            if ($item.Subject -eq "Busy") {
+                $newMeeting.Subject = "SYENSQO meeting"
+            } else {
+                $newMeeting.Subject = $item.Subject
+            }
+    
+            # Assigner les dates de début et de fin
+            $newMeeting.Start = $item.Start
+            $newMeeting.End = $item.End
+            
+            $newMeeting.Body = "Ajouté depuis le calendrier Internet"
+            $newMeeting.ReminderSet = $true
+            $newMeeting.ReminderMinutesBeforeStart = 15 # Rappel 15 minutes avant
+    
+            # Sauvegarder la réunion
+            try {
+                $newMeeting.Save()
+                Add-Content -path $LogPath -value "Réunion créée : $($newMeeting.Subject) de $($newMeeting.Start) à $($newMeeting.End)"
+            } catch {
+                Add-Content -path $LogPath -value "Erreur lors de la création de la réunion : $_"
+            }
         } else {
-            $newMeeting.Subject = $item.Subject
+            Add-Content -path $LogPath -value "La réunion du $($mainItem.Start) au $($mainItem.End) existe déjà."
         }
-
-        # Assigner les dates de debut et de fin
-        $newMeeting.Start = $item.Start
-        $newMeeting.End = $item.End
-        
-        $newMeeting.Body = "Ajoute depuis le calendrier Internet"
-        $newMeeting.ReminderSet = $true
-        $newMeeting.ReminderMinutesBeforeStart = 15 # Rappel 15 minutes avant
-
-        # Sauvegarder la reunion
-        try {
-            $newMeeting.Save()
-            Write-Host "Reunion creee : $($newMeeting.Subject) de $($newMeeting.Start) a $($newMeeting.End)"
-        } catch {
-            Write-Host "Erreur lors de la creation de la reunion : $_"
-        }
-    } else {
-        Write-Host "La reunion du $($mainItem.Start) au $($mainItem.End) existe deja."
     }
+}
+catch {
+    Add-Content -path $LogPath -value "[$(Get-Date)] Erreur ligne $($_.InvocationInfo.ScriptLineNumber) :: $($_.Exception.Message)"
 }
