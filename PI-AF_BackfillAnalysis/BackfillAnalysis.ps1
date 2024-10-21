@@ -82,6 +82,7 @@ function Connect-AFServer {
         exit
     }
 }
+
 function Disconnect-AFServer {
     param (
         [string]$afServerName = "vmcegdidev001"
@@ -128,12 +129,12 @@ function Get-AFAnalysisListFromCsvFile {
 # Fonction de construction de l'objet AFTimeRange à partir d'un offset et d'une durée de backfill souhaitée
 function Format-AFTimeRange{
     param(
-        [Int] $BackfillDurationInMinutes = 1440, # A day per default
-        [Int] $OffsetInMinutes = 30             # 30 minutes offset
+        [Int] $DeltaStartInMinutes = 1440, # A day per default
+        [Int] $DeltaEndInMinutes = 30      # 30 minutes offset
     )
 
-    $endTime = New-Object OSIsoft.AF.Time.AFTime((Get-Date).AddMinutes((-$OffsetInMinutes)))
-    $startTime = New-Object OSIsoft.AF.Time.AFTime((Get-Date).AddMinutes(-$BackfillDurationInMinutes))
+    $endTime = New-Object OSIsoft.AF.Time.AFTime((Get-Date).AddMinutes((-$DeltaEndInMinutes)))
+    $startTime = New-Object OSIsoft.AF.Time.AFTime((Get-Date).AddMinutes(-$DeltaStartInMinutes))
     $afTimeRange = New-Object OSIsoft.AF.Time.AFTimeRange($startTime, $endTime)
     
     Write-Log -v_Message "The backfill time range is set to start at $($startTime) and end at $($endTime)." -v_ConsoleOutput -v_LogLevel INFO
@@ -148,6 +149,7 @@ function Start-AFAnalysisRecalculation{
         [OSIsoft.AF.Time.AFTimeRange] $AFTimeRange
     )
 
+    $afAnalysisService = $AFDatabase.PISystem.AnalysisService
     try {  
         if($null -eq $AFAnalysisList){
             throw "There is no valid AFAnalysis in the input CSV file."
@@ -155,20 +157,33 @@ function Start-AFAnalysisRecalculation{
         # Start AF Analysis
         Write-Log -v_Message "Starting all the analysis listed..." -v_ConsoleOutput -v_LogLevel INFO
         [OSIsoft.AF.Analysis.AFAnalysis]::SetStatus($AFAnalysisList, [OSIsoft.AF.Analysis.AFStatus]::Enabled)
-    
+
         # TODO : Evaluer le status des analyses avant de continuer
-        # $statuses = [OSIsoft.AF.Analysis.AFAnalysis]::GetStatus($AFAnalysisList)
-        # Write-Log -v_Message "Type of returned data: $($statuses.GetType().FullName)" -v_ConsoleOutput
-        # Write-Log -v_Message "Status: $statuses" -v_ConsoleOutput
         Start-Sleep -Seconds 10
+        # METHODE 1 : GetStatus -- KO : retourne vide
+            # $statuses = [OSIsoft.AF.Analysis.AFAnalysis]::GetStatus($AFAnalysisList)
+            # Write-Log -v_Message "Status: $statuses" -v_ConsoleOutput
+        # METHODE 2 : QueryRuntimeInformation -- KO : Status = Running si l'analyse démarre.
+            # $results = $afAnalysisService.QueryRuntimeInformation("path: '*$($AFDatabase.name)*' sortBy: 'lastLag' sortOrder: 'Desc'", "id name status");
+            # if ($null -eq $results) {
+            #     write-log -v_Message "Pas de resultat sur la requete." -v_ConsoleOutput -v_LogLevel WARN 
+            # }
+            # foreach($result in $results)
+            # {
+            #     $guid = $result[0];
+            #     $name = $result[1];
+            #     $status = $result[2];
+            #     write-log -v_Message "Guid = $guid, Name = $name, Status = $status." -v_ConsoleOutput -v_LogLevel INFO
+            # }
         Write-Log -v_Message "Analysis successfully started." -v_ConsoleOutput -v_LogLevel INFO
 
         # Queue a backfill request to 
         Write-Log -v_Message "Starting Backfill request to the analysis service." -v_ConsoleOutput -v_LogLevel INFO
-        $afAnalysisService = $AFDatabase.PISystem.AnalysisService
         $QueueCalculationEventID = $afAnalysisService.QueueCalculation($AFAnalysisList, $AFTimeRange, [OSIsoft.AF.Analysis.AFAnalysisService+CalculationMode]::DeleteExistingData)
         Write-Log -v_Message "Calculation started by the analysis service. ID: $QueueCalculationEventID" -v_ConsoleOutput -v_LogLevel INFO
-        Start-Sleep -Seconds 10
+
+        # TODO : Evaluer le temps de la CalculationQueue
+        # Start-Sleep -Seconds 10
         Write-Log -v_Message "Calculation successfully finished." -v_ConsoleOutput -v_LogLevel INFO
 
         Write-Log -v_Message "Stopping all the analysis listed..." -v_ConsoleOutput -v_LogLevel INFO
@@ -185,7 +200,9 @@ function main {
         [string]$afServerName = "vmcegdidev001",
         [string]$afDBName = "Romain_Dev",
         [string]$afSDKPath = "E:\Program Files (x86)\PIPC\AF\PublicAssemblies\4.0\OSIsoft.AFSDK.dll",
-        [string]$InputCsvFilePathAndName = (Join-path $PSScriptRoot "Input.csv")
+        [string]$InputCsvFilePathAndName = (Join-path $PSScriptRoot "Input.csv"),
+        [int]$DeltaStartInMinutes = 1440,
+        [int]$DeltaEndInMinutes = 0
     )
 
     # 00 : PREREQUISITES
@@ -193,14 +210,14 @@ function main {
     Write-Log -v_Message "Script $(Split-Path -Path $MyInvocation.PSCommandPath -Leaf) started" -v_ConsoleOutput -v_LogLevel SUCCESS
     Import-AFSDK -AFSDKPath $afSDKPath    
     
-    # 01 : CONNECTION 
+    # 01 : CONNECTION TO PI AF AND DATABASE
     $AFDB = Connect-AFServer -afServerName $afServerName -afDBName $afDBName
 
     # 02 : READ INPUT FILE AND GET THE ANALYSIS
     $AFAnalysisList = Get-AFAnalysisListFromCsvFile -AFDatabase $AFDB -InputCsvFilePathAndName $InputCsvFilePathAndName
 
     # 03 : CALCULATE THE TIME RANGE OF THE BACKFILL
-    $AFTimeRangeToBackfill = Format-AFTimeRange -BackfillDurationInMinutes 1440 -OffsetInMinutes 30
+    $AFTimeRangeToBackfill = Format-AFTimeRange -DeltaStartInMinutes $DeltaStartInMinutes -DeltaEndInMinutes $DeltaEndInMinutes
 
     # 04 : START THE ANALYSIS, BACKFILL, AND STOP THE ANALYSIS
     Start-AFAnalysisRecalculation -AFDatabase $AFDB -AFAnalysisList $AFAnalysisList -AFTimeRange $AFTimeRangeToBackfill
@@ -211,4 +228,4 @@ function main {
 }
 
 # Lancement fonction principale
-main -afServerName "vmcegdidev001" -afDBName "Romain_Dev" -InputCsvFilePathAndName (Join-path $PSScriptRoot "input.csv") -afSDKPath "E:\Program Files (x86)\PIPC\AF\PublicAssemblies\4.0\OSIsoft.AFSDK.dll"
+main -afServerName "vmcegdidev001" -afDBName "Romain_Dev" -InputCsvFilePathAndName (Join-path $PSScriptRoot "input.csv") -afSDKPath "E:\Program Files (x86)\PIPC\AF\PublicAssemblies\4.0\OSIsoft.AFSDK.dll" -DeltaStartInMinutes 1440 -DeltaEndInMinutes 0
