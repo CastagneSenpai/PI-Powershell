@@ -183,7 +183,8 @@ function Start-AFAnalysisRecalculation{
         Write-Log -v_Message "Calculation started by the analysis service. ID: $QueueCalculationEventID" -v_ConsoleOutput -v_LogLevel INFO
 
         # TODO : Evaluer le temps de la CalculationQueue
-        # Start-Sleep -Seconds 10
+            # Méthode 1 : QueryRuntimeInformation -- KO car Guid retourné concerne les analyses et non le backfilling lancé.
+        Start-Sleep -Seconds 10
         Write-Log -v_Message "Calculation successfully finished." -v_ConsoleOutput -v_LogLevel INFO
 
         Write-Log -v_Message "Stopping all the analysis listed..." -v_ConsoleOutput -v_LogLevel INFO
