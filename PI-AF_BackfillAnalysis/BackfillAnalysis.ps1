@@ -163,18 +163,20 @@ function Start-AFAnalysisRecalculation{
         # METHODE 1 : GetStatus -- KO : retourne vide
             # $statuses = [OSIsoft.AF.Analysis.AFAnalysis]::GetStatus($AFAnalysisList)
             # Write-Log -v_Message "Status: $statuses" -v_ConsoleOutput
-        # METHODE 2 : QueryRuntimeInformation -- KO : Status = Running si l'analyse démarre.
-            # $results = $afAnalysisService.QueryRuntimeInformation("path: '*$($AFDatabase.name)*' sortBy: 'lastLag' sortOrder: 'Desc'", "id name status");
-            # if ($null -eq $results) {
-            #     write-log -v_Message "Pas de resultat sur la requete." -v_ConsoleOutput -v_LogLevel WARN 
+        # METHODE 2 : QueryRuntimeInformation -- KO : Status passe de Stopped à Running sans passer par Starting.
+            # Do{
+            #     $results = $afAnalysisService.QueryRuntimeInformation("path: '*$($AFDatabase.name)*' sortBy: 'lastLag' sortOrder: 'Desc'", "id name status");
+            #     if ($null -eq $results) {
+            #         write-log -v_Message "Pas de resultat sur la requete." -v_ConsoleOutput -v_LogLevel WARN 
+            #     }
+            #     foreach($result in $results){
+            #         $guid = $result[0];
+            #         $name = $result[1];
+            #         $status = $result[2];
+            #         write-log -v_Message "Guid = $guid, Name = $name, Status = $status." -v_ConsoleOutput -v_LogLevel INFO
+            #     }
             # }
-            # foreach($result in $results)
-            # {
-            #     $guid = $result[0];
-            #     $name = $result[1];
-            #     $status = $result[2];
-            #     write-log -v_Message "Guid = $guid, Name = $name, Status = $status." -v_ConsoleOutput -v_LogLevel INFO
-            # }
+            # While ($results[0].status -eq "Running")            
         Write-Log -v_Message "Analysis successfully started." -v_ConsoleOutput -v_LogLevel INFO
 
         # Queue a backfill request to 
