@@ -176,7 +176,7 @@ function Start-AFAnalysisRecalculation{
             #         write-log -v_Message "Guid = $guid, Name = $name, Status = $status." -v_ConsoleOutput -v_LogLevel INFO
             #     }
             # }
-            # While ($results[0].status -eq "Running")            
+            # While ($results[0].status -ne "Running")            
         Write-Log -v_Message "Analysis successfully started." -v_ConsoleOutput -v_LogLevel INFO
 
         # Queue a backfill request to 
