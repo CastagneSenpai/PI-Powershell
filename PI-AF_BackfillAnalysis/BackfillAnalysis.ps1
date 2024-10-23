@@ -1,3 +1,52 @@
+<#
+.SYNOPSIS
+    Script to manage AFAnalysis backfill processes and PI AF analysis operations.
+
+.DESCRIPTION
+    This script automates the backfilling of AFAnalysis in PI AF using OSIsoft AF SDK. It includes connection management to AF servers, CSV-based input for analyses, log handling, and configurable time ranges for the backfill. 
+    It also handles the start and stop of the specified analyses.
+
+.NOTES
+    Developer  : Romain Castagné
+    Email      : romain.castagne-ext@syensqo.com
+    Company    : CGI - SYENSQO
+    Date       : 23/10/2024
+    Version    : 1.0
+
+.PARAMETER afServerName
+    The name of the PI AF server to connect to.
+
+.PARAMETER afDBName
+    The name of the PI AF database to use.
+
+.PARAMETER afSDKPath
+    Path to the OSIsoft AF SDK DLL.
+
+.PARAMETER InputCsvFilePathAndName
+    Path and filename for the input CSV file containing analysis details.
+
+.PARAMETER DeltaStartInMinutes
+    Time range start offset in minutes from the current time (for backfill).
+
+.PARAMETER DeltaEndInMinutes
+    Time range end offset in minutes from the current time (for backfill).
+
+.PARAMETER AutomaticMode
+    Set to true for automatic pauses, false for manual validation.
+
+#>
+
+
+param(
+        [string]$afServerName = "ACEW1DSTEKPIS01",
+        [string]$afDBName = "Test_Prd_Posting",
+        [string]$afSDKPath = "D:\OSISOFT\PIPC_x86\AF\PublicAssemblies\4.0\OSIsoft.AFSDK.dll",
+        [string]$InputCsvFilePathAndName = (Join-path $PSScriptRoot "input.csv"),
+        [int]$DeltaStartInMinutes = 1440,
+        [int]$DeltaEndInMinutes = 30,
+        [bool]$AutomaticMode = $false
+)
+
 # Fonction de gestion des logs 
 function Write-Log {
     [CmdletBinding()]
@@ -43,7 +92,7 @@ function Write-Log {
     }
 }
 
-# Fonction d'ajout de la librairie AFSDK si non ajoutée précédemment 
+# Fonction d'ajout de la librairie AFSDK si non ajoutÃ©e prÃ©cÃ©demment 
 function Import-AFSDK{
     param(
         [string] $AFSDKPath = "C:\Program Files (x86)\PIPC\AF\PublicAssemblies\4.0\OSIsoft.AFSDK.dll"
@@ -56,7 +105,7 @@ function Import-AFSDK{
     Write-Log -v_Message "AF SDK found and loaded." -v_ConsoleOutput -v_LogLevel INFO
 }
 
-# Fonction de connection à PI AF, retourne l'objet de la connection de type [OSIsoft.AF.AFDatabase]
+# Fonction de connection Ã  PI AF, retourne l'objet de la connection de type [OSIsoft.AF.AFDatabase]
 function Connect-AFServer {
     param (
         [string]$afServerName = "vmcegdidev001",
@@ -100,7 +149,7 @@ function Disconnect-AFServer {
     }
 }
 
-# Fonction qui retourne une liste d'objet AFAnalysis à partir d'un fichier CSV
+# Fonction qui retourne une liste d'objet AFAnalysis Ã  partir d'un fichier CSV
 function Get-AFAnalysisListFromCsvFile {
     param(
         $AFDatabase,
@@ -126,7 +175,7 @@ function Get-AFAnalysisListFromCsvFile {
     return $AnalysisList
 }
 
-# Fonction de construction de l'objet AFTimeRange à partir d'un offset et d'une durée de backfill souhaitée
+# Fonction de construction de l'objet AFTimeRange Ã  partir d'un offset et d'une durÃ©e de backfill souhaitÃ©e
 function Format-AFTimeRange{
     param(
         [Int] $DeltaStartInMinutes = 1440, # A day per default
@@ -141,12 +190,50 @@ function Format-AFTimeRange{
     return $afTimeRange
 }
 
+function Start-VisualSleep {
+    param(
+        [Int] $Seconds = 30,
+        [String] $Activity = "Attente en cours"
+    )
+
+    # Créer une nouvelle fenêtre
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = $Activity
+    $form.Size = New-Object System.Drawing.Size(300, 100)
+    
+    # Créer une barre de progression
+    $progressBar = New-Object System.Windows.Forms.ProgressBar
+    $progressBar.Location = New-Object System.Drawing.Point(20, 20)
+    $progressBar.Size = New-Object System.Drawing.Size(250, 30)
+    $progressBar.Style = 'Continuous'
+    
+    # Ajouter la barre de progression à la fenêtre
+    $form.Controls.Add($progressBar)
+    
+    # Afficher la fenêtre
+    $form.Show()
+
+    # Définir l'intervalle en millisecondes pour une mise à jour plus fluide
+    $interval = 100  # En millisecondes (0.1 seconde)
+    $totalIterations = ($Seconds * 1000) / $interval  # Nombre total d'itérations
+
+    # Démarrer la mise à jour de la barre de progression
+    for ($i = 1; $i -le $totalIterations; $i++) {
+        $progressBar.Value = ($i / $totalIterations) * 100  # Mettre à jour la valeur de la barre de progression
+        Start-Sleep -Milliseconds $interval  # Pause entre chaque mise à jour
+    }
+
+    # Fermer la fenêtre après l'attente
+    $form.Close()
+}
+
 # Fonction de lancement d'un backfill de plusieurs analyses sur une AFTimeRange
 function Start-AFAnalysisRecalculation{
     param(
         $AFDatabase,
         [System.Collections.Generic.List[OSIsoft.AF.Analysis.AFAnalysis]] $AFAnalysisList,
-        [OSIsoft.AF.Time.AFTimeRange] $AFTimeRange
+        [OSIsoft.AF.Time.AFTimeRange] $AFTimeRange,
+        $AutomaticMode
     )
 
     $afAnalysisService = $AFDatabase.PISystem.AnalysisService
@@ -159,34 +246,37 @@ function Start-AFAnalysisRecalculation{
         [OSIsoft.AF.Analysis.AFAnalysis]::SetStatus($AFAnalysisList, [OSIsoft.AF.Analysis.AFStatus]::Enabled)
 
         # TODO : Evaluer le status des analyses avant de continuer
-        Start-Sleep -Seconds 10
+        if($AutomaticMode -eq $true) { Start-VisualSleep -Seconds 12 -Activity "Analysis starting..." }
+        if($AutomaticMode -eq $false ) { Read-Host "Pause - Validate Analysis started." }
         # METHODE 1 : GetStatus -- KO : retourne vide
             # $statuses = [OSIsoft.AF.Analysis.AFAnalysis]::GetStatus($AFAnalysisList)
             # Write-Log -v_Message "Status: $statuses" -v_ConsoleOutput
-        # METHODE 2 : QueryRuntimeInformation -- KO : Status passe de Stopped à Running sans passer par Starting.
-            # Do{
-            #     $results = $afAnalysisService.QueryRuntimeInformation("path: '*$($AFDatabase.name)*' sortBy: 'lastLag' sortOrder: 'Desc'", "id name status");
-            #     if ($null -eq $results) {
-            #         write-log -v_Message "Pas de resultat sur la requete." -v_ConsoleOutput -v_LogLevel WARN 
-            #     }
-            #     foreach($result in $results){
-            #         $guid = $result[0];
-            #         $name = $result[1];
-            #         $status = $result[2];
-            #         write-log -v_Message "Guid = $guid, Name = $name, Status = $status." -v_ConsoleOutput -v_LogLevel INFO
-            #     }
-            # }
-            # While ($results[0].status -ne "Running")            
+        #METHODE 2 : QueryRuntimeInformation -- KO : Status passe de Stopped Ã  Running sans passer par Starting.
+        #    Do{
+        #        $results = $afAnalysisService.QueryRuntimeInformation("path: '*$($AFDatabase.name)*' sortBy: 'lastLag' sortOrder: 'Desc'", "id name status");
+        #        if ($null -eq $results) {
+        #            write-log -v_Message "Pas de resultat sur la requete." -v_ConsoleOutput -v_LogLevel WARN 
+        #        }
+        #        foreach($result in $results){
+        #            $guid = $result[0];
+        #            $name = $result[1];
+        #            $status = $result[2];
+        #            write-log -v_Message "Guid = $guid, Name = $name, Status = $status." -v_ConsoleOutput -v_LogLevel INFO
+        #        }
+        #    }
+        #    While ($results[0].status -ne "Running")        
+            
         Write-Log -v_Message "Analysis successfully started." -v_ConsoleOutput -v_LogLevel INFO
-
+        
         # Queue a backfill request to 
         Write-Log -v_Message "Starting Backfill request to the analysis service." -v_ConsoleOutput -v_LogLevel INFO
         $QueueCalculationEventID = $afAnalysisService.QueueCalculation($AFAnalysisList, $AFTimeRange, [OSIsoft.AF.Analysis.AFAnalysisService+CalculationMode]::DeleteExistingData)
         Write-Log -v_Message "Calculation started by the analysis service. ID: $QueueCalculationEventID" -v_ConsoleOutput -v_LogLevel INFO
 
         # TODO : Evaluer le temps de la CalculationQueue
-            # Méthode 1 : QueryRuntimeInformation -- KO car Guid retourné concerne les analyses et non le backfilling lancé.
-        Start-Sleep -Seconds 10
+            # MÃ©thode 1 : QueryRuntimeInformation -- KO car Guid retournÃ© concerne les analyses et non le backfilling lancÃ©.
+        if($AutomaticMode -eq $true) { Start-VisualSleep -Seconds 15 -Activity "Calculation Queue in progress ..." }
+        if($AutomaticMode -eq $false ) { Read-Host "Pause - Validate backfill OK" }
         Write-Log -v_Message "Calculation successfully finished." -v_ConsoleOutput -v_LogLevel INFO
 
         Write-Log -v_Message "Stopping all the analysis listed..." -v_ConsoleOutput -v_LogLevel INFO
@@ -200,12 +290,13 @@ function Start-AFAnalysisRecalculation{
 
 function main {
     param(
-        [string]$afServerName = "vmcegdidev001",
-        [string]$afDBName = "Romain_Dev",
-        [string]$afSDKPath = "E:\Program Files (x86)\PIPC\AF\PublicAssemblies\4.0\OSIsoft.AFSDK.dll",
-        [string]$InputCsvFilePathAndName = (Join-path $PSScriptRoot "Input.csv"),
+        [string]$afServerName,
+        [string]$afDBName,
+        [string]$afSDKPath,
+        [string]$InputCsvFilePathAndName,
         [int]$DeltaStartInMinutes = 1440,
-        [int]$DeltaEndInMinutes = 0
+        [int]$DeltaEndInMinutes = 0,
+        [bool]$AutomaticMode = $true
     )
 
     # 00 : PREREQUISITES
@@ -223,12 +314,13 @@ function main {
     $AFTimeRangeToBackfill = Format-AFTimeRange -DeltaStartInMinutes $DeltaStartInMinutes -DeltaEndInMinutes $DeltaEndInMinutes
 
     # 04 : START THE ANALYSIS, BACKFILL, AND STOP THE ANALYSIS
-    Start-AFAnalysisRecalculation -AFDatabase $AFDB -AFAnalysisList $AFAnalysisList -AFTimeRange $AFTimeRangeToBackfill
+    Start-AFAnalysisRecalculation -AFDatabase $AFDB -AFAnalysisList $AFAnalysisList -AFTimeRange $AFTimeRangeToBackfill -AutomaticMode $AutomaticMode
 
     # 05 : DISCONNECT FROM AF SERVER
     Disconnect-AFServer -afServerName $afServerName
     Write-Log -v_Message "Backfilling process successfully completed." -v_ConsoleOutput -v_LogLevel SUCCESS
+    if($AutomaticMode -eq $false ) { Read-Host "Press <Enter> to close the program." }
 }
 
 # Lancement fonction principale
-main -afServerName "vmcegdidev001" -afDBName "Romain_Dev" -InputCsvFilePathAndName (Join-path $PSScriptRoot "input.csv") -afSDKPath "E:\Program Files (x86)\PIPC\AF\PublicAssemblies\4.0\OSIsoft.AFSDK.dll" -DeltaStartInMinutes 1440 -DeltaEndInMinutes 0
+main -afServerName $afServerName -afDBName $afDBName -InputCsvFilePathAndName $InputCsvFilePathAndName -afSDKPath $afSDKPath -DeltaStartInMinutes $DeltaStartInMinutes -DeltaEndInMinutes $DeltaEndInMinutes -AutomaticMode $AutomaticMode
