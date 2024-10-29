@@ -134,6 +134,7 @@ function Connect-AFServer {
     }
 }
 
+# Function for a clean disconnection from PI AF
 function Disconnect-AFServer {
     param (
         [string]$afServerName = "vmcegdidev001"
@@ -171,7 +172,7 @@ function Get-AFAnalysisListFromCsvFile {
         }
         else{
             $AnalysisList.Add($AFAnalysisToAdd)
-            Write-Log -v_ConsoleOutput -v_Message "Analysis `'$($row.ElementPath)\$AFAnalysisToAdd`' added for backfilling process."
+            Write-Log -v_ConsoleOutput -v_Message "--- Analysis `'$($row.ElementPath)\$AFAnalysisToAdd`' added for backfilling process."
         }
     }
     return $AnalysisList
@@ -303,25 +304,31 @@ function Start-AFAnalysisRecalculation{
         [OSIsoft.AF.Analysis.AFAnalysis]::SetStatus($AFAnalysisList, [OSIsoft.AF.Analysis.AFStatus]::Enabled)
 
         # TODO : Evaluer le status des analyses avant de continuer
-        if($AutomaticMode -eq $true) { Start-VisualSleep -Seconds 12 -Activity "Analysis starting..." }
         if($AutomaticMode -eq $false ) { Read-Host "Pause - Validate Analysis started." }
-        # METHODE 1 : GetStatus -- KO : retourne vide
-            # $statuses = [OSIsoft.AF.Analysis.AFAnalysis]::GetStatus($AFAnalysisList)
-            # Write-Log -v_Message "Status: $statuses" -v_ConsoleOutput
-        #METHODE 2 : QueryRuntimeInformation -- KO : Status passe de Stopped Ã  Running sans passer par Starting.
-        #    Do{
-        #        $results = $afAnalysisService.QueryRuntimeInformation("path: '*$($AFDatabase.name)*' sortBy: 'lastLag' sortOrder: 'Desc'", "id name status");
-        #        if ($null -eq $results) {
-        #            write-log -v_Message "Pas de resultat sur la requete." -v_ConsoleOutput -v_LogLevel WARN 
-        #        }
-        #        foreach($result in $results){
-        #            $guid = $result[0];
-        #            $name = $result[1];
-        #            $status = $result[2];
-        #            write-log -v_Message "Guid = $guid, Name = $name, Status = $status." -v_ConsoleOutput -v_LogLevel INFO
-        #        }
-        #    }
-        #    While ($results[0].status -ne "Running")        
+        if($AutomaticMode -eq $true) { 
+            # Start-VisualSleep -Seconds 12 -Activity "Analysis starting..." 
+            
+            # QueryRuntimeInformation -- KO : Status passe de Stopped Ã  Running sans passer par Starting.
+            Do{
+                $results = $afAnalysisService.QueryRuntimeInformation("path: '*$($AFDatabase.name)*' sortBy: 'lastLag' sortOrder: 'Desc'", "id name status");
+                if ($null -eq $results) {
+                    write-log -v_Message "Pas de resultat sur la requete." -v_ConsoleOutput -v_LogLevel WARN 
+                }
+                foreach($result in $results){
+                    $guid = $result[0];
+                    $name = $result[1];
+                    $status = $result[2];
+                    write-log -v_Message "Guid = $guid, Name = $name, Status = $status." -v_ConsoleOutput -v_LogLevel INFO
+                }
+                if (($results | ForEach-Object { $_[2] } | Where-Object { $_ -eq "Error" } | Measure-Object).Count -gt 0) {
+                    Write-Log -v_Message "Some analysis listed in the input file are in error, please correct them or remove them from the list." -v_LogLevel ERROR -v_ConsoleOutput
+                    Exit
+                }
+                Start-Sleep -Seconds 1
+            }
+            While ($results -and -not ($results | ForEach-Object { $_[2] } | Where-Object { $_ -ne "Running" } | Measure-Object).Count -eq 0)
+            # While ($results[0].status -ne "Running")
+        }
             
         Write-Log -v_Message "Analysis successfully started." -v_ConsoleOutput -v_LogLevel INFO
         
@@ -348,10 +355,10 @@ function main {
         [string]$afDBName,
         [string]$afSDKPath,
         [string]$InputCsvFilePathAndName,
+        [string]$RecalculationLogFilePath,
         [int]$DeltaStartInMinutes = 1440,
         [int]$DeltaEndInMinutes = 0,
-        [bool]$AutomaticMode = $true,
-        $RecalculationLogFilePath
+        [bool]$AutomaticMode = $true        
     )
 
     # 00 : PREREQUISITES
