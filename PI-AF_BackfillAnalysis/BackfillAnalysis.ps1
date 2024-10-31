@@ -252,36 +252,48 @@ function Wait-EndOfBackfilling{
     # Loop to wait for backfilling to finish
     do {
         $RecalculationLogFile = Import-Csv -Delimiter ',' -Path $RecalculationLogFilePath
-
+    
         foreach ($AnalysisWithStatus in $AnalysisWithStatusList) {
             if ($AnalysisWithStatus.Status -eq "Completed") {
                 continue
             }
-
-            # Check if a line in the log indicates that the analysis is complete
+    
+            # Check if a line in the log indicates that the analysis is complete or has an error
             foreach ($logLine in $RecalculationLogFile) {
-                
+    
                 # Format the dates of the log file to compare with the sent AFTimeRange
                 $LogDateArray = $logLine.TimeRange -split '--'
                 $LogDateDebut = (Get-Date $LogDateArray[0]).ToString("yyyy-MM-ddThh:00:00")
                 $LogDateFin = (Get-Date $LogDateArray[1]).ToString("yyyy-MM-ddThh:00:00")
                 $LogLineTimeRangeFormatted = $LogDateDebut + "--" + $LogDateFin
-
-                
+    
                 # Check that the log corresponds to the analysis and the specified period
-                if (($logLine.Id -eq $AnalysisWithStatus.Analysis.UniqueID) -and ($LogLineTimeRangeFormatted -eq $AFTimeRangeConvertedToMatchLogFile) -and ($logLine.Status -eq "Completed")) {
-                        Write-Log -v_Message "--- Backfilling of analysis $($AnalysisWithStatus.analysis.target)[$($AnalysisWithStatus.analysis.name)] completed." -v_LogLevel INFO -v_ConsoleOutput 
+                if ($logLine.Id -eq $AnalysisWithStatus.Analysis.UniqueID -and $LogLineTimeRangeFormatted -eq $AFTimeRangeConvertedToMatchLogFile -and $logLine.Type -eq "Manual") {
+    
+                    # Case when status is Completed
+                    if ($logLine.Status -in ("Completed", "PendingCompletion")) {
+                        Write-Log -v_Message "--- Backfilling of analysis $($AnalysisWithStatus.analysis.target)[$($AnalysisWithStatus.analysis.name)] completed." -v_LogLevel INFO -v_ConsoleOutput
                         $AnalysisWithStatus.Status = "Completed"
                         break
+                    }
+                    # Case when status is Error
+                    elseif ($logLine.Status -eq "Error") {
+                        Write-Log -v_Message "--- Error encountered in backfilling of analysis $($AnalysisWithStatus.analysis.target)[$($AnalysisWithStatus.analysis.name)] - Exiting." -v_LogLevel ERROR -v_ConsoleOutput
+                        $AnalysisWithStatus.Status = "Error"
+                        break
+                    }
                 }
+            }    
+            # Exit the main loop if an error was detected
+            if ($AnalysisWithStatusList.Status -contains "Error") {
+                return $false
             }
         }
+    
         # Pause before next check
         Start-Sleep -Seconds 5
-    }
-
-    # We continue as long as there are “InProgress” analyzes remaining
-    while ($AnalysisWithStatusList.Status -contains "InProgress") 
+    
+    } while ($AnalysisWithStatusList.Status -contains "InProgress" -and -not ($AnalysisWithStatusList.Status -contains "Error"))
 }
 
 # Function for launching a backfill of several analyzes on an AFTimeRange
@@ -299,18 +311,35 @@ function Start-AFAnalysisRecalculation{
         if($null -eq $AFAnalysisList){
             throw "There is no valid AFAnalysis in the input CSV file."
         }
+
+        ## DEBUG : affiche le statut Disabled des analyses avant lancement
+        # $AFAnalysisList | ForEach-Object { 
+        #     $status = $_.GetStatus()
+        #     Write-Host "Analyse: $($_.Name), Statut: $status"
+        # }
+
         # Start AF Analysis
         Write-Log -v_Message "Starting all the analysis listed..." -v_ConsoleOutput -v_LogLevel INFO
         [OSIsoft.AF.Analysis.AFAnalysis]::SetStatus($AFAnalysisList, [OSIsoft.AF.Analysis.AFStatus]::Enabled)
 
-        # TODO : Evaluer le status des analyses avant de continuer
+        # Wait that analysis are well started
         if($AutomaticMode -eq $false ) { Read-Host "Pause - Validate Analysis started." }
         if($AutomaticMode -eq $true) { 
-            # Start-VisualSleep -Seconds 12 -Activity "Analysis starting..." 
-            
-            
 
-            # QueryRuntimeInformation -- KO : Status passe de Stopped Ã  Running sans passer par Starting.
+            # METHOD 1 - KO return empty : $AnalysisStatusList = [OSIsoft.AF.Analysis.AFAnalysis]::GetStatus($AFAnalysisList)
+            # METHOD 2 - OK but return Enabled/Disabled instead of advanced fields (Starting, Running, Stopping, Stopped...)
+            do {
+                # Check that all analysis are Enabled
+                $allEnabled = ($AFAnalysisList | ForEach-Object { $_.GetStatus() } | Where-Object { $_ -ne "Enabled" }).Count -eq 0
+                
+                # Retry 1 second later if not the case
+                Start-Sleep -Seconds 1
+
+            } while (-not $allEnabled)
+
+            # METHOD 3 - Fixed pause : Start-VisualSleep -Seconds 12 -Activity "Analysis starting..." 
+            
+            # METHOD 4 : QueryRuntimeInformation -- Have to apply a filter to will be different from input csv analysis list + 'starting' status issue (cf. AVEVA Case)
             # Do{
             #     $results = $afAnalysisService.QueryRuntimeInformation("path: '*$($AFDatabase.name)*' sortBy: 'lastLag' sortOrder: 'Desc'", "id name status");
             #     if ($null -eq $results) {
@@ -335,16 +364,18 @@ function Start-AFAnalysisRecalculation{
         
         # Queue a backfill request to 
         Write-Log -v_Message "Starting Backfill request to the analysis service." -v_ConsoleOutput -v_LogLevel INFO
-        if ($afAnalysisService.CanQueueCalculation()){
+        $reason = [ref]""
+        if ($afAnalysisService.CanQueueCalculation($reason)){
             $QueueCalculationEventID = $afAnalysisService.QueueCalculation($AFAnalysisList, $AFTimeRange, [OSIsoft.AF.Analysis.AFAnalysisService+CalculationMode]::DeleteExistingData)
             Write-Log -v_Message "Calculation started by the analysis service. ID: $QueueCalculationEventID" -v_ConsoleOutput -v_LogLevel INFO
         }
         else {
             Write-Log -v_Message "Calculation cannot be started by the analysis service." -v_ConsoleOutput -v_LogLevel INFO
-            throw "`$afAnalysisService.CanQueueCalculation() returned false"
+            throw "`$afAnalysisService.CanQueueCalculation() returned false : $reason"
         }
        
-        Wait-EndOfBackfilling -AFAnalysisList $AFAnalysisList -AFTimeRange $AFTimeRange -RecalculationLogFilePath $RecalculationLogFilePath
+        $BackfillStatus = Wait-EndOfBackfilling -AFAnalysisList $AFAnalysisList -AFTimeRange $AFTimeRange -RecalculationLogFilePath $RecalculationLogFilePath
+        if($false -eq $BackfillStatus) { throw "Backfill goes wrong for some analysis."}
     }
     catch {
         Write-Log -v_Message "Failed to backfill analysis: Line $($_.InvocationInfo.ScriptLineNumber) :: $_" -v_LogLevel "ERROR" -v_ConsoleOutput
