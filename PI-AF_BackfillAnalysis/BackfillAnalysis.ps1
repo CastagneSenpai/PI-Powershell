@@ -308,34 +308,42 @@ function Start-AFAnalysisRecalculation{
         if($AutomaticMode -eq $true) { 
             # Start-VisualSleep -Seconds 12 -Activity "Analysis starting..." 
             
+            
+
             # QueryRuntimeInformation -- KO : Status passe de Stopped Ã  Running sans passer par Starting.
-            Do{
-                $results = $afAnalysisService.QueryRuntimeInformation("path: '*$($AFDatabase.name)*' sortBy: 'lastLag' sortOrder: 'Desc'", "id name status");
-                if ($null -eq $results) {
-                    write-log -v_Message "Pas de resultat sur la requete." -v_ConsoleOutput -v_LogLevel WARN 
-                }
-                foreach($result in $results){
-                    $guid = $result[0];
-                    $name = $result[1];
-                    $status = $result[2];
-                    write-log -v_Message "Guid = $guid, Name = $name, Status = $status." -v_ConsoleOutput -v_LogLevel INFO
-                }
-                if (($results | ForEach-Object { $_[2] } | Where-Object { $_ -eq "Error" } | Measure-Object).Count -gt 0) {
-                    Write-Log -v_Message "Some analysis listed in the input file are in error, please correct them or remove them from the list." -v_LogLevel ERROR -v_ConsoleOutput
-                    Exit
-                }
-                Start-Sleep -Seconds 1
-            }
-            While ($results -and -not ($results | ForEach-Object { $_[2] } | Where-Object { $_ -ne "Running" } | Measure-Object).Count -eq 0)
-            # While ($results[0].status -ne "Running")
+            # Do{
+            #     $results = $afAnalysisService.QueryRuntimeInformation("path: '*$($AFDatabase.name)*' sortBy: 'lastLag' sortOrder: 'Desc'", "id name status");
+            #     if ($null -eq $results) {
+            #         write-log -v_Message "Pas de resultat sur la requete." -v_ConsoleOutput -v_LogLevel WARN 
+            #     }
+            #     foreach($result in $results){
+            #         $guid = $result[0];
+            #         $name = $result[1];
+            #         $status = $result[2];
+            #         write-log -v_Message "Guid = $guid, Name = $name, Status = $status." -v_ConsoleOutput -v_LogLevel INFO
+            #     }
+            #     if (($results | ForEach-Object { $_[2] } | Where-Object { $_ -eq "Error" } | Measure-Object).Count -gt 0) {
+            #         Write-Log -v_Message "Some analysis listed in the input file are in error, please correct them or remove them from the list." -v_LogLevel ERROR -v_ConsoleOutput
+            #         Exit
+            #     }
+            #     Start-Sleep -Seconds 1
+            # }
+            # While ($results -and -not ($results | ForEach-Object { $_[2] } | Where-Object { $_ -ne "Running" } | Measure-Object).Count -eq 0)
         }
             
         Write-Log -v_Message "Analysis successfully started." -v_ConsoleOutput -v_LogLevel INFO
         
         # Queue a backfill request to 
         Write-Log -v_Message "Starting Backfill request to the analysis service." -v_ConsoleOutput -v_LogLevel INFO
-        $QueueCalculationEventID = $afAnalysisService.QueueCalculation($AFAnalysisList, $AFTimeRange, [OSIsoft.AF.Analysis.AFAnalysisService+CalculationMode]::DeleteExistingData)
-        Write-Log -v_Message "Calculation started by the analysis service. ID: $QueueCalculationEventID" -v_ConsoleOutput -v_LogLevel INFO
+        if ($afAnalysisService.CanQueueCalculation()){
+            $QueueCalculationEventID = $afAnalysisService.QueueCalculation($AFAnalysisList, $AFTimeRange, [OSIsoft.AF.Analysis.AFAnalysisService+CalculationMode]::DeleteExistingData)
+            Write-Log -v_Message "Calculation started by the analysis service. ID: $QueueCalculationEventID" -v_ConsoleOutput -v_LogLevel INFO
+        }
+        else {
+            Write-Log -v_Message "Calculation cannot be started by the analysis service." -v_ConsoleOutput -v_LogLevel INFO
+            throw "`$afAnalysisService.CanQueueCalculation() returned false"
+        }
+       
         Wait-EndOfBackfilling -AFAnalysisList $AFAnalysisList -AFTimeRange $AFTimeRange -RecalculationLogFilePath $RecalculationLogFilePath
     }
     catch {
