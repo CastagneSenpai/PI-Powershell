@@ -82,7 +82,7 @@ function Write-Log {
                 }
 
                 if ($v_ConsoleOutput.IsPresent) {
-                    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                    # [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
                     Write-Host $logEntry -ForegroundColor $color
                 }
             }
@@ -372,7 +372,7 @@ function main {
     # 00 : PREREQUISITES
     Clear-Host
     Write-Log -v_Message "Script $(Split-Path -Path $MyInvocation.PSCommandPath -Leaf) started" -v_ConsoleOutput -v_LogLevel SUCCESS
-    Import-AFSDK -AFSDKPath $afSDKPath    
+    Import-AFSDK -AFSDKPath $afSDKPath
     
     # 01 : CONNECTION TO PI AF AND DATABASE
     $AFDB = Connect-AFServer -afServerName $afServerName -afDBName $afDBName
