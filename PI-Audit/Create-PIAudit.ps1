@@ -1,5 +1,3 @@
-import-module (Join-Path $PSScriptRoot '..\lib\connection.psm1')
-
 Function Get-PIServerType {
     $ServerTypes = @{}  # Creer un hashtable vide pour stocker les types de serveur
 
@@ -44,6 +42,7 @@ Function Get-PIWindowsServicesInfo {
 Function Get-PIDATuningParameters{
 
     # Connexion au PI Data Archive
+    import-module (Join-Path $PSScriptRoot '..\lib\connection.psm1')
     $con = Connect-PIDataArchive -PIDataArchiveMachineName "$env:COMPUTERNAME"
 
     # Creer un hashtable vide
@@ -180,6 +179,117 @@ Function Write-ReportToFile{
     $csvLines | Out-File -FilePath $OutputCSVFile -Encoding UTF8
 }
 
+Function Show-FormattedReportGUI {
+    param(
+        [string]$csvFilePath = (join-path $PSScriptRoot ("Audit-$env:COMPUTERNAME-" + (Get-Date -format "yyyyMMddThhmm") + ".csv"))
+    )
+
+    # Charger les assemblys nécessaires pour les graphiques
+    Add-Type -AssemblyName "System.Windows.Forms"
+    Add-Type -AssemblyName "System.Windows.Forms.DataVisualization"
+
+    # Lire le fichier CSV
+    $data = Import-Csv -Path $csvFilePath -Delimiter ';'
+
+    # Créer la fenêtre principale
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = "Rapport de l'état du serveur"
+    $form.Size = New-Object System.Drawing.Size(800, 600)
+    $form.StartPosition = 'CenterScreen'
+
+    # Ajouter une barre de titre (Label)
+    $titleLabel = New-Object System.Windows.Forms.Label
+    $titleLabel.Text = "Rapport du serveur - " + $env:COMPUTERNAME
+    $titleLabel.Font = New-Object System.Drawing.Font("Arial", 14, [System.Drawing.FontStyle]::Bold)
+    $titleLabel.AutoSize = $true
+    $titleLabel.Location = New-Object System.Drawing.Point(10, 10)
+    $form.Controls.Add($titleLabel)
+
+    # Ajouter un graphique circulaire pour les ratios d'éléments templatés
+    $chart = New-Object Windows.Forms.DataVisualization.Charting.Chart
+    $chart.Width = 300
+    $chart.Height = 300
+    $chartArea = New-Object Windows.Forms.DataVisualization.Charting.ChartArea
+    $chart.ChartAreas.Add($chartArea)
+    
+    $series = New-Object Windows.Forms.DataVisualization.Charting.Series
+    $series.Name = "Templates"
+    $series.Points.AddXY("Templated", [double]($data | Where-Object { $_.Parametre -like '*RatioElementsTempletises*' }).Valeur.Split('%')[0])
+    $series.Points.AddXY("Non-Templated", 100 - [double]($data | Where-Object { $_.Parametre -like '*RatioElementsTempletises*' }).Valeur.Split('%')[0])
+    $series.ChartType = [System.Windows.Forms.DataVisualization.Charting.SeriesChartType]::Pie
+    $chart.Series.Add($series)
+
+    $chart.Location = New-Object System.Drawing.Point(10, 50)
+    $form.Controls.Add($chart)
+
+    # Ajouter un Label pour l'état des services PI
+    $statusLabel = New-Object System.Windows.Forms.Label
+    $statusLabel.Text = "Services PI"
+    $statusLabel.Font = New-Object System.Drawing.Font("Arial", 12, [System.Drawing.FontStyle]::Bold)
+    $statusLabel.AutoSize = $true
+    $statusLabel.Location = New-Object System.Drawing.Point(350, 10)
+    $form.Controls.Add($statusLabel)
+
+    # Affichage des services PI avec couleur d'état
+    $yPos = 50
+    $data | Where-Object { $_.Parametre -like 'PI*Service' } | ForEach-Object {
+        $serviceStatusLabel = New-Object System.Windows.Forms.Label
+        $serviceStatusLabel.Text = "$($_.Parametre): $($_.Valeur)"
+        $serviceStatusLabel.AutoSize = $true
+        $serviceStatusLabel.Location = New-Object System.Drawing.Point(350, $yPos)
+
+        # Appliquer des couleurs en fonction de l'état du service
+        if ($_.Valeur -like "Running*") {
+            $serviceStatusLabel.ForeColor = [System.Drawing.Color]::Green
+        } elseif ($_.Valeur -like "Stopped*") {
+            $serviceStatusLabel.ForeColor = [System.Drawing.Color]::Red
+        } else {
+            $serviceStatusLabel.ForeColor = [System.Drawing.Color]::Orange
+        }
+
+        $form.Controls.Add($serviceStatusLabel)
+        $yPos += 30
+    }
+
+    # Ajouter des barres de progression pour l'usage de la mémoire
+    $memoryLabel = New-Object System.Windows.Forms.Label
+    $memoryLabel.Text = "Mémoire Totale (MB)"
+    $memoryLabel.Font = New-Object System.Drawing.Font("Arial", 12, [System.Drawing.FontStyle]::Bold)
+    $memoryLabel.AutoSize = $true
+    $memoryLabel.Location = New-Object System.Drawing.Point(10, 380)
+    $form.Controls.Add($memoryLabel)
+
+    $memoryBar = New-Object System.Windows.Forms.ProgressBar
+    $memoryBar.Location = New-Object System.Drawing.Point(10, 410)
+    $memoryBar.Width = 300
+    $memoryBar.Height = 30
+    $memoryBar.Maximum = [int]($data | Where-Object { $_.Parametre -eq "MemoryTotalMB" }).Valeur
+    $memoryBar.Value = [int]($data | Where-Object { $_.Parametre -eq "MemoryTotalMB" }).Valeur
+    $form.Controls.Add($memoryBar)
+
+    # Affichage des valeurs de configuration
+    $configLabel = New-Object System.Windows.Forms.Label
+    $configLabel.Text = "Configuration des Bases PI AF"
+    $configLabel.Font = New-Object System.Drawing.Font("Arial", 12, [System.Drawing.FontStyle]::Bold)
+    $configLabel.AutoSize = $true
+    $configLabel.Location = New-Object System.Drawing.Point(350, $yPos + 20)
+    $form.Controls.Add($configLabel)
+
+    $yPos += 50
+    $data | Where-Object { $_.Parametre -like 'AFDatabasesCount' -or $_.Parametre -like '*NombreTotal*' } | ForEach-Object {
+        $configStatusLabel = New-Object System.Windows.Forms.Label
+        $configStatusLabel.Text = "$($_.Parametre): $($_.Valeur)"
+        $configStatusLabel.AutoSize = $true
+        $configStatusLabel.Location = New-Object System.Drawing.Point(350, $yPos)
+
+        $form.Controls.Add($configStatusLabel)
+        $yPos += 30
+    }
+
+    # Afficher la fenêtre
+    $form.ShowDialog()
+}
+
 Function Main {
     Clear-Host
 
@@ -201,6 +311,7 @@ Function Main {
     # Gestion du rapport - console + fichier
     Show-Report -AuditReport $AuditReport
     Write-ReportToFile -AuditReport $AuditReport
+    # Show-FormattedReportGUI
 }
 
 # APPEL FONCTION MAIN
