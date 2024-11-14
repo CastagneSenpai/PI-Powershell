@@ -1,0 +1,86 @@
+﻿Parametre;Valeur
+CPUTotal;8
+MemoryTotalMB;32766.88
+OSVersion;Microsoft Windows Server 2019 Datacenter
+UptimeDays;31
+PI AF Application Service;Running (Automatic)
+PI Analysis Service;Running (Automatic)
+PI Archive Subsystem;Running (Automatic)
+PI Backup Subsystem;Running (Automatic)
+PI Base Subsystem;Running (Automatic)
+PI Batch Subsystem;Stopped (Automatic)
+PI Buffer Subsystem;Stopped (Manual)
+PI License Manager;Running (Automatic)
+PI Message Subsystem;Running (Automatic)
+PI Network Manager;Running (Automatic)
+PI Notifications Service;Stopped (Automatic)
+PI Performance Equation Scheduler;Running (Automatic)
+PI Recalculator Subsystem;Stopped (Manual)
+PI Shutdown Subsystem;Stopped (Automatic)
+PI Snapshot Subsystem;Running (Automatic)
+PI SQL Subsystem;Running (Automatic)
+PI To Data Hub Agent;Stopped (Manual)
+PI Totalizer Subsystem;Running (Automatic)
+PI Update Manager;Running (Automatic)
+Archive_LowDiskSpaceMB_Default;256
+Archive_LowDiskSpaceMB_Value;N/A
+Archive_MaxPrivateBytesPercentOfTotal_Default;40
+Archive_MaxPrivateBytesPercentOfTotal_Value;N/A
+Archive_MaxQueryExecutionSec_Default;260
+Archive_MaxQueryExecutionSec_Value;N/A
+Archive_MinMemAvail_Default;10
+Archive_MinMemAvail_Value;N/A
+Backup_LowDiskSpaceMB_Default;256
+Backup_LowDiskSpaceMB_Value;N/A
+MaxAuthAttempts_Default;3
+MaxAuthAttempts_Value;N/A
+readRetry_Default;N/A
+readRetry_Value;250
+Replication_ClockDiffLimit_Default;300
+Replication_ClockDiffLimit_Value;N/A
+Server_AuthenticationPolicy_Default;0
+Server_AuthenticationPolicy_Value;0
+Snapshot_AnnotationSizeLimit_Default;1024
+Snapshot_AnnotationSizeLimit_Value;N/A
+Snapshot_EventQueuePath_Default;0
+Snapshot_EventQueuePath_Value;F:\PI_Queue\
+StandAloneMode_Default;N/A
+StandAloneMode_Value;0
+writeRetry_Default;N/A
+writeRetry_Value;250
+AFDatabasesCount;7
+BASE_TEST_530547_NombreTotalElements;9
+BASE_TEST_530547_NombreTotalTables;0
+BASE_TEST_530547_NombreTotalTemplates;5
+BASE_TEST_530547_NombreTotalTemplatesAnalyses;6
+BASE_TEST_530547_RatioElementsTempletises;44.44%
+CGI_EOLE_SudOuest_509381_NombreTotalElements;9
+CGI_EOLE_SudOuest_509381_NombreTotalTables;0
+CGI_EOLE_SudOuest_509381_NombreTotalTemplates;2
+CGI_EOLE_SudOuest_509381_NombreTotalTemplatesAnalyses;4
+CGI_EOLE_SudOuest_509381_RatioElementsTempletises;44.44%
+Configuration_NombreTotalElements;6
+Configuration_NombreTotalTables;0
+Configuration_NombreTotalTemplates;0
+Configuration_NombreTotalTemplatesAnalyses;0
+Configuration_RatioElementsTempletises;50%
+PICGI_NombreTotalElements;0
+PICGI_NombreTotalTables;0
+PICGI_NombreTotalTemplates;0
+PICGI_NombreTotalTemplatesAnalyses;0
+PICGI_RatioElementsTempletises;0
+Romain_Dev_NombreTotalElements;4
+Romain_Dev_NombreTotalTables;1
+Romain_Dev_NombreTotalTemplates;2
+Romain_Dev_NombreTotalTemplatesAnalyses;2
+Romain_Dev_RatioElementsTempletises;100%
+WIND_FARM_AF_530547_NombreTotalElements;9
+WIND_FARM_AF_530547_NombreTotalTables;0
+WIND_FARM_AF_530547_NombreTotalTemplates;3
+WIND_FARM_AF_530547_NombreTotalTemplatesAnalyses;6
+WIND_FARM_AF_530547_RatioElementsTempletises;44.44%
+WindFarm_AF_476134_NombreTotalElements;8
+WindFarm_AF_476134_NombreTotalTables;0
+WindFarm_AF_476134_NombreTotalTemplates;0
+WindFarm_AF_476134_NombreTotalTemplatesAnalyses;0
+WindFarm_AF_476134_RatioElementsTempletises;100%

@@ -28,6 +28,32 @@ Function Connect-PIServer([string]$PIServerHost, [int] $nbTry = 3)
     }
 }
 
+function Connect-AFDatabase {
+    param (
+        [string]$afServerName = "vmcegdidev001",
+        [string]$afDBName = "Romain_Dev"
+    )
+
+    try {
+        $afSystems = New-Object OSIsoft.AF.PISystems
+        $afServer = $afSystems[$afServerName]
+        $afServer.Connect()
+        Write-Log -v_Message "Successfully connected to AF Server: $afServerName" -v_ConsoleOutput -v_LogLevel INFO
+        $afDB = $afServer.Databases[$afDBName]
+
+        if ($null -eq $afDB) {
+            Write-Log -v_Message "Database $afDBName not found on AF Server $afServerName." -v_LogLevel ERROR -v_ConsoleOutput
+        } else {
+            Write-Log -v_Message "Successfully connected to AF Database: $afDBName" -v_ConsoleOutput -v_LogLevel INFO
+        }
+        return $afDB
+    }
+    catch {
+        Write-Log -v_Message "Failed to connect to AF Server or Database: $_" -v_ConsoleOutput -v_LogLevel ERROR
+        exit
+    }
+}
+
 Function Test-PIConnection([System.Object] $PIConnection)
 {
     while ($PIConnection.Connected -eq $false){
@@ -82,6 +108,7 @@ Function Get-PIValuesSafe([System.Object] $PIPoint, [DateTime] $st, [DateTime] $
 }
 
 Export-ModuleMember -Function Connect-PIServer
+Export-ModuleMember -Function Connect-AFDatabase
 Export-ModuleMember -Function Test-PIConnection
 Export-ModuleMember -Function Get-PIValuesSafe
 Export-ModuleMember -Function Get-PIpointSafe
