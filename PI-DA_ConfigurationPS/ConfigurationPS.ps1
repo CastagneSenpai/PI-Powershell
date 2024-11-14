@@ -150,7 +150,7 @@ foreach($point in $points)
     catch [System.Exception]
     {
         Write-Log -v_LogFile $v_LogPathfile -v_LogLevel ERROR -v_ConsoleOutput -v_Message "$point : Error writing result of Get-PIpoint function to $fileDataPath. [$($_.Exception.Message)]"
-        Read-Host -Prompt "Press Enter to quit ConfigurationPS."
+        Read-Host -Prompt "Press Enter to quit ConfigurationPS." 
         exit
     }
 }
