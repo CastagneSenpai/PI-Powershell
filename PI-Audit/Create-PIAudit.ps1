@@ -1,5 +1,5 @@
 Function Get-PIServerType {
-    $ServerTypes = @{}  # Creer un hashtable vide pour stocker les types de serveur
+    $ServerTypes = @{}  # Hashtable vide
 
     # PI Data Archive
     $ServerTypes["PI Data Archive"] = if (Get-Service -ServiceName "piarchss" -ErrorAction SilentlyContinue) { $true } else { $false }
@@ -27,7 +27,7 @@ Function Get-ServerInformation {
 }
 
 Function Get-PIWindowsServicesInfo {
-    $PIWindowsServiceStatus = @{}  # Creer un hashtable vide
+    $PIWindowsServiceStatus = @{}  # Hashtable vide
     
     # Obtenir les services commençant par "PI"
     Get-Service -DisplayName "PI *" -ErrorAction SilentlyContinue | ForEach-Object {
@@ -40,10 +40,9 @@ Function Get-PIWindowsServicesInfo {
 }
 
 Function Get-PIDATuningParameters{
-
-    # Connexion au PI Data Archive
-    import-module (Join-Path $PSScriptRoot '..\lib\connection.psm1')
-    $con = Connect-PIDataArchive -PIDataArchiveMachineName "$env:COMPUTERNAME"
+    param(
+        $Con   
+    )
 
     # Creer un hashtable vide
     $tuningParams = @{}
@@ -79,12 +78,11 @@ Function Get-PIDATuningParameters{
 }  
 
 Function Get-PIDAArchiveDiskInfo{
+    param(
+        $Con   
+    )
 
-    # Connexion au PI Data Archive
-    import-module (Join-Path $PSScriptRoot '..\lib\connection.psm1')
-    $con = Connect-PIDataArchive -PIDataArchiveMachineName "$env:COMPUTERNAME"
-
-    # Creer un hashtable vide
+    # Hashtable vide
     $driveInfo = @{}
 
     $ArchivesRootAndFilePrefixe = (Get-PITuningParameter -Name "Archive_AutoArchiveFileRoot" -Connection $con).Value
@@ -99,11 +97,25 @@ Function Get-PIDAArchiveDiskInfo{
     Return $driveInfo
 }
 
+Function Get-PIDAPointSourcesInfo{
+    param(
+        $Con   
+    )
+    
+    # Hashtable vide
+    $pointSourceInfo = @{}
+
+    $PointSources = Get-PIPointSource -Name "*" -Connection $con
+    foreach ($PointSource in $PointSources){
+        $pointSourceInfo["$($PointSource.Name)"] = $PointSource.Count
+    }
+    return $pointSourceInfo 
+}
+
 Function Get-PIAFInformations{
-    # Creation de l'objet PI Systems et connexion au serveur
-    $afSystems = New-Object OSIsoft.AF.PISystems
-    $afServer = $afSystems[$env:COMPUTERNAME]
-    $afServer.Connect()
+    param(
+        $afServer
+    )
 
     # Initialisation de la variable pour stocker les informations PI AF
     $PIAFInformation = @{}
@@ -319,12 +331,22 @@ Function Main {
     $PIWindowsServiceStatus = Get-PIWindowsServicesInfo
 
     if($ServerType['PI Data Archive'])  { 
-        $PIDATuningParameters = Get-PIDATuningParameters
-        $PIDAArchivesDiskInfo = Get-PIDAArchiveDiskInfo
+        # Connexion au PI Data Archive
+        import-module (Join-Path $PSScriptRoot '..\lib\connection.psm1')
+        $con = Connect-PIDataArchive -PIDataArchiveMachineName "$env:COMPUTERNAME"
+        
+        $PIDATuningParameters = Get-PIDATuningParameters -con $con
+        $PIDAArchivesDiskInfo = Get-PIDAArchiveDiskInfo -con $con
+        $PIDAPointSourcesInfo = Get-PIDAPointSourcesInfo -Con $con
     }
 
     if($ServerType['PI Asset Framework'])   {
-        $PIAFInformations = Get-PIAFInformations 
+        # Creation de l'objet PI Systems et connexion au serveur
+        $afSystems = New-Object OSIsoft.AF.PISystems
+        $afServer = $afSystems[$env:COMPUTERNAME]
+        $afServer.Connect()
+
+        $PIAFInformations = Get-PIAFInformations -afServer $afServer
     }
 
     # Fusionner les resultats en un seul objet
@@ -333,6 +355,7 @@ Function Main {
         Windows_Service_Status = $PIWindowsServiceStatus
         PI_DA_Tuning_Parameters = $PIDATuningParameters
         PI_DA_ArchivesDisk = $PIDAArchivesDiskInfo
+        PI_DA_Point_Sources = $PIDAPointSourcesInfo
         PI_AF_Informations = $PIAFInformations
     }
 
