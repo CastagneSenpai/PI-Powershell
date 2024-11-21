@@ -18,9 +18,9 @@ Function Get-ServerInformation {
     # Recuperer les informations de base du serveur
     $ServeurInformations = @{
         OSVersion = (Get-CimInstance -ClassName Win32_OperatingSystem).Caption
-        UptimeDays = ((Get-Date) - (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime).Days
+        UptimeDays = "{0} days" -f ((Get-Date) - (Get-CimInstance -ClassName Win32_OperatingSystem).LastBootUpTime).Days
         CPUTotal = (Get-CimInstance -ClassName Win32_Processor | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum
-        MemoryTotalMB = [math]::round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1MB, 2)
+        MemoryTotalMB = "{0:N2} GB" -f [math]::round((Get-CimInstance -ClassName Win32_ComputerSystem).TotalPhysicalMemory / 1GB, 2)
     }
 
     return $ServeurInformations
@@ -76,7 +76,28 @@ Function Get-PIDATuningParameters{
         }
     }
     return $tuningParams
-}   
+}  
+
+Function Get-PIDAArchiveDiskInfo{
+
+    # Connexion au PI Data Archive
+    import-module (Join-Path $PSScriptRoot '..\lib\connection.psm1')
+    $con = Connect-PIDataArchive -PIDataArchiveMachineName "$env:COMPUTERNAME"
+
+    # Creer un hashtable vide
+    $driveInfo = @{}
+
+    $ArchivesRootAndFilePrefixe = (Get-PITuningParameter -Name "Archive_AutoArchiveFileRoot" -Connection $con).Value
+    $ArchivesDriveLetter = $ArchivesRootAndFilePrefixe.Substring(0,2)
+    $drive = Get-PSDrive -Name ((Get-Item $ArchivesDriveLetter).PSDrive.Name)
+
+    # Calculer les espaces disque
+    $driveInfo["ArchiveDisk_SpaceUsedGB"] = "{0:N2} GB" -f [math]::Round($drive.Used / 1GB, 2)
+    $driveInfo["ArchiveDisk_SpaceFreeGB"] = "{0:N2} GB" -f ([math]::Round($drive.Free / 1GB, 2))
+    $driveInfo["ArchiveDisk_PercentUsed"] = "{0:N2} %" -f ([math]::Round(($drive.Used / ($drive.Used + $drive.Free)) * 100, 2))
+
+    Return $driveInfo
+}
 
 Function Get-PIAFInformations{
     # Creation de l'objet PI Systems et connexion au serveur
@@ -297,14 +318,21 @@ Function Main {
     $ServerInformations = Get-ServerInformation
     $PIWindowsServiceStatus = Get-PIWindowsServicesInfo
 
-    if($ServerType['PI Data Archive'])  { $PITuningParameters = Get-PIDATuningParameters }
-    if($ServerType['PI Asset Framework'])   { $PIAFInformations = Get-PIAFInformations }
+    if($ServerType['PI Data Archive'])  { 
+        $PIDATuningParameters = Get-PIDATuningParameters
+        $PIDAArchivesDiskInfo = Get-PIDAArchiveDiskInfo
+    }
+
+    if($ServerType['PI Asset Framework'])   {
+        $PIAFInformations = Get-PIAFInformations 
+    }
 
     # Fusionner les resultats en un seul objet
     $AuditReport = [PSCustomObject]@{
         Server_Informations = $ServerInformations
         Windows_Service_Status = $PIWindowsServiceStatus
-        PI_DA_Tuning_Parameters = $PITuningParameters
+        PI_DA_Tuning_Parameters = $PIDATuningParameters
+        PI_DA_ArchivesDisk = $PIDAArchivesDiskInfo
         PI_AF_Informations = $PIAFInformations
     }
 
