@@ -112,6 +112,31 @@ Function Get-PIDAPointSourcesInfo{
     return $pointSourceInfo 
 }
 
+Function Get-PIDADigitalStateInfo{
+    param(
+        $con
+    )
+    
+
+    #TODO
+    return $null
+}
+
+Function Get-PIDAStatistics{
+    param(
+        $con
+    )
+    
+    $statInfo = @{}
+    $stats = Get-PIArchiveStatistics -Connection $con
+
+    ForEach($stat in $stats){
+        $statInfo["$($stat.Name)"] = $stat.Value
+    }
+
+    return $statInfo
+}
+
 Function Get-PIAFInformations{
     param(
         $afServer
@@ -338,6 +363,8 @@ Function Main {
         $PIDATuningParameters = Get-PIDATuningParameters -con $con
         $PIDAArchivesDiskInfo = Get-PIDAArchiveDiskInfo -con $con
         $PIDAPointSourcesInfo = Get-PIDAPointSourcesInfo -Con $con
+        $PIDADigitalStates = Get-PIDADigitalStateInfo -con $con
+        $PIDAStatisticsInfo = Get-PIDAStatistics -con $con
     }
 
     if($ServerType['PI Asset Framework'])   {
@@ -353,9 +380,11 @@ Function Main {
     $AuditReport = [PSCustomObject]@{
         Server_Informations = $ServerInformations
         Windows_Service_Status = $PIWindowsServiceStatus
+        PI_DA_Statistics = $PIDAStatisticsInfo
         PI_DA_Tuning_Parameters = $PIDATuningParameters
         PI_DA_ArchivesDisk = $PIDAArchivesDiskInfo
         PI_DA_Point_Sources = $PIDAPointSourcesInfo
+        PI_DA_Digital_States = $PIDADigitalStates
         PI_AF_Informations = $PIAFInformations
     }
 
