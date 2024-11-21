@@ -283,10 +283,6 @@ function Wait-EndOfBackfilling{
                         break
                     }
                 }
-            }    
-            # Exit the main loop if an error was detected
-            if ($AnalysisWithStatusList.Status -contains "Error") {
-                return $false
             }
         }
     
@@ -294,6 +290,12 @@ function Wait-EndOfBackfilling{
         Start-Sleep -Seconds 5
     
     } while ($AnalysisWithStatusList.Status -contains "InProgress" -and -not ($AnalysisWithStatusList.Status -contains "Error"))
+    if ($AnalysisWithStatusList.Status -contains "Error") {
+        return $false
+    }
+    else{
+        return $true
+    }
 }
 
 # Function for launching a backfill of several analyzes on an AFTimeRange
