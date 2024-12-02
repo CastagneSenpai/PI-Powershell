@@ -329,37 +329,37 @@ function Start-AFAnalysisRecalculation{
         if($AutomaticMode -eq $true) { 
 
             # METHOD 1 - KO return empty : $AnalysisStatusList = [OSIsoft.AF.Analysis.AFAnalysis]::GetStatus($AFAnalysisList)
-            # METHOD 2 - OK but return Enabled/Disabled instead of advanced fields (Starting, Running, Stopping, Stopped...)
-            do {
-                # Check that all analysis are Enabled
-                $allEnabled = ($AFAnalysisList | ForEach-Object { $_.GetStatus() } | Where-Object { $_ -ne "Enabled" }).Count -eq 0
+            # METHOD 2 - KO because return Enabled/Disabled instead of advanced fields (Starting, Running, Stopping, Stopped...)
+            # do {
+            #     # Check that all analysis are Enabled
+            #     $allEnabled = ($AFAnalysisList | ForEach-Object { $_.GetStatus() } | Where-Object { $_ -ne "Enabled" }).Count -eq 0
                 
-                # Retry 1 second later if not the case
-                Start-Sleep -Seconds 1
+            #     # Retry 1 second later if not the case
+            #     Start-Sleep -Seconds 1
 
-            } while (-not $allEnabled)
+            # } while (-not $allEnabled)
 
             # METHOD 3 - Fixed pause : Start-VisualSleep -Seconds 12 -Activity "Analysis starting..." 
             
-            # METHOD 4 : QueryRuntimeInformation -- Have to apply a filter to will be different from input csv analysis list + 'starting' status issue (cf. AVEVA Case)
-            # Do{
-            #     $results = $afAnalysisService.QueryRuntimeInformation("path: '*$($AFDatabase.name)*' sortBy: 'lastLag' sortOrder: 'Desc'", "id name status");
-            #     if ($null -eq $results) {
-            #         write-log -v_Message "Pas de resultat sur la requete." -v_ConsoleOutput -v_LogLevel WARN 
-            #     }
-            #     foreach($result in $results){
-            #         $guid = $result[0];
-            #         $name = $result[1];
-            #         $status = $result[2];
-            #         write-log -v_Message "Guid = $guid, Name = $name, Status = $status." -v_ConsoleOutput -v_LogLevel INFO
-            #     }
-            #     if (($results | ForEach-Object { $_[2] } | Where-Object { $_ -eq "Error" } | Measure-Object).Count -gt 0) {
-            #         Write-Log -v_Message "Some analysis listed in the input file are in error, please correct them or remove them from the list." -v_LogLevel ERROR -v_ConsoleOutput
-            #         Exit
-            #     }
-            #     Start-Sleep -Seconds 1
-            # }
-            # While ($results -and -not ($results | ForEach-Object { $_[2] } | Where-Object { $_ -ne "Running" } | Measure-Object).Count -eq 0)
+            # METHOD 4 : QueryRuntimeInformation -- Have to apply a filter, it will be different from input csv analysis list + 'starting' status issue (cf. AVEVA Case)
+            Do{
+                $results = $afAnalysisService.QueryRuntimeInformation("path: '*$($AFDatabase.name)*' sortBy: 'lastLag' sortOrder: 'Desc'", "id name status");
+                if ($null -eq $results) {
+                    write-log -v_Message "Pas de resultat sur la requete." -v_ConsoleOutput -v_LogLevel WARN 
+                }
+                foreach($result in $results){
+                    $guid = $result[0];
+                    $name = $result[1];
+                    $status = $result[2];
+                    write-log -v_Message "Guid = $guid, Name = $name, Status = $status." -v_ConsoleOutput -v_LogLevel INFO
+                }
+                if (($results | ForEach-Object { $_[2] } | Where-Object { $_ -eq "Error" } | Measure-Object).Count -gt 0) {
+                    Write-Log -v_Message "Some analysis listed in the input file are in error, please correct them or remove them from the list." -v_LogLevel ERROR -v_ConsoleOutput
+                    Exit
+                }
+                Start-Sleep -Seconds 1
+            }
+            While ($results -and -not ($results | ForEach-Object { $_[2] } | Where-Object { $_ -ne "Running" } | Measure-Object).Count -eq 0)
         }
             
         Write-Log -v_Message "Analysis successfully started." -v_ConsoleOutput -v_LogLevel INFO
