@@ -11,7 +11,12 @@
     Email      : romain.castagne-ext@syensqo.com
     Company    : CGI - SYENSQO
     Date       : 23/10/2024
-    Version    : 2.0
+    Version    : 2.1
+
+Version 1.0 : Script start the analysis, user manually validate that the analysis are running ; Same for backfilling process.
+Version 1.1 : Script use categories to filter analysis to backfill, it can process multiple cycle (OEE before EF ...)
+Version 2.0 : Script detect automatically when the analysis are started, and when the backfill is finished using the analysis log file.
+Version 2.1 : User can choose to start/stop the analysis, or let them in start mode.
 
 .PARAMETER afServerName
     The name of the PI AF server to connect to.
@@ -46,10 +51,11 @@ param(
         [string]$afSDKPath = "D:\Applications\AVEVA\PIPC_x86\AF\PublicAssemblies\4.0\OSIsoft.AFSDK.dll",
         [string]$RecalculationLogFilePath = "C:\ProgramData\OSIsoft\PIAnalysisNotifications\Data\Recalculation\recalculation-log.csv",
         [string]$InputCsvFilePathAndName = (Join-path $PSScriptRoot "input.csv"),
-        [int]$DeltaStartInMinutes = 1500,	# 25h
-        [int]$DeltaEndInMinutes = 5,		# 5min
+        [int]$DeltaStartInMinutes = 6000,	# 1500 = 25h
+        [int]$DeltaEndInMinutes = 5,		# 5 = 5min
         [System.Object[]]$CategoriesName = @('Autobackfill_First', 'Autobackfill_Last'),
-        [bool]$AutomaticMode = $true
+        [bool]$AutomaticMode = $true,
+        [bool]$StartAndStopAnalysis = $true
 )
 
 # Log management function
@@ -276,10 +282,10 @@ function Wait-EndOfBackfilling{
         }
     
         # Pause before next check
-        Start-Sleep -Seconds 5
+        Start-Sleep -Seconds 15
         $nbTry++
     
-    } while ($AnalysisWithStatusList.Status -contains "InProgress" -and -not ($AnalysisWithStatusList.Status -contains "Error") -and $nbTry -ile 24)
+    } while ($AnalysisWithStatusList.Status -contains "InProgress" -and -not ($AnalysisWithStatusList.Status -contains "Error") -and $nbTry -ile 125)
     if ($AnalysisWithStatusList.Status -contains "Error") {
         return $false
     }
@@ -296,7 +302,8 @@ function Start-AFAnalysisRecalculation{
         [OSIsoft.AF.Time.AFTimeRange] $AFTimeRange,
         [bool]$AutomaticMode,
         [string] $RecalculationLogFilePath,
-        [string]$CategoryName
+        [string]$CategoryName,
+        [bool]$StartAndStopAnalysis
     )
 
     $afAnalysisService = $AFDatabase.PISystem.AnalysisService
@@ -306,35 +313,41 @@ function Start-AFAnalysisRecalculation{
         }
 
         # Start AF Analysis
-        Write-Log -v_Message "Starting all the analysis listed..." -v_ConsoleOutput -v_LogLevel INFO
-        [OSIsoft.AF.Analysis.AFAnalysis]::SetStatus($AFAnalysisList, [OSIsoft.AF.Analysis.AFStatus]::Enabled)
-
-        # Wait that analysis are well started
-        if($AutomaticMode -eq $false ) { Read-Host "Pause - Validate Analysis started." }
-        if($AutomaticMode -eq $true) { 
-            
-            # QueryRuntimeInformation -- Apply a filter by Category name = Auto-Backfill
-            Do{
-                $results = $afAnalysisService.QueryRuntimeInformation("path: '*$($AFDatabase.name)*' Category: '$CategoryName' sortBy: 'lastLag' sortOrder: 'Desc'", "id name status");
-                if ($null -eq $results) {
-                    write-log -v_Message "Pas de resultat sur la requete." -v_ConsoleOutput -v_LogLevel WARN 
+        if($StartAndStopAnalysis){
+            Write-Log -v_Message "Starting all the analysis listed..." -v_ConsoleOutput -v_LogLevel INFO
+            [OSIsoft.AF.Analysis.AFAnalysis]::SetStatus($AFAnalysisList, [OSIsoft.AF.Analysis.AFStatus]::Enabled)
+    
+            # Wait that analysis are well started
+            if($AutomaticMode -eq $false ) { Read-Host "Pause - Validate Analysis started." }
+            if($AutomaticMode -eq $true) { 
+                
+                # QueryRuntimeInformation -- Apply a filter by Category name = Auto-Backfill
+                Do{
+                    $results = $afAnalysisService.QueryRuntimeInformation("path: '*$($AFDatabase.name)*' Category: '$CategoryName' sortBy: 'lastLag' sortOrder: 'Desc'", "id name status");
+                    if ($null -eq $results) {
+                        write-log -v_Message "Pas de resultat sur la requete." -v_ConsoleOutput -v_LogLevel WARN 
+                    }
+                    foreach($result in $results){
+                        $guid = $result[0];
+                        $name = $result[1];
+                        $status = $result[2];
+                        Write-log -v_Message "Guid = $guid, Name = $name, Status = $status." -v_ConsoleOutput -v_LogLevel INFO
+                    }
+                    if (($results | ForEach-Object { $_[2] } | Where-Object { $_ -eq "Error" } | Measure-Object).Count -gt 0) {
+                        Write-Log -v_Message "Some analysis listed in the input file are in error, please correct them or remove them from the list." -v_LogLevel ERROR -v_ConsoleOutput
+                        Exit
+                    }
+                    Start-Sleep -Seconds 1
                 }
-                foreach($result in $results){
-                    $guid = $result[0];
-                    $name = $result[1];
-                    $status = $result[2];
-                    Write-log -v_Message "Guid = $guid, Name = $name, Status = $status." -v_ConsoleOutput -v_LogLevel INFO
-                }
-                if (($results | ForEach-Object { $_[2] } | Where-Object { $_ -eq "Error" } | Measure-Object).Count -gt 0) {
-                    Write-Log -v_Message "Some analysis listed in the input file are in error, please correct them or remove them from the list." -v_LogLevel ERROR -v_ConsoleOutput
-                    Exit
-                }
-                Start-Sleep -Seconds 1
+                While ($results -and -not ($results | ForEach-Object { $_[2] } | Where-Object { $_ -ne "Running" } | Measure-Object).Count -eq 0)
             }
-            While ($results -and -not ($results | ForEach-Object { $_[2] } | Where-Object { $_ -ne "Running" } | Measure-Object).Count -eq 0)
+                
+            Write-Log -v_Message "Analysis successfully started." -v_ConsoleOutput -v_LogLevel INFO
         }
-            
-        Write-Log -v_Message "Analysis successfully started." -v_ConsoleOutput -v_LogLevel INFO
+        else {
+            Write-Log -v_Message "The parameter 'StartAndStopAnalysis' is defined as 'false' - the script does not start/stop the analysis." -v_ConsoleOutput -v_LogLevel INFO
+        }
+        
         
         # Queue a backfill request to 
         Write-Log -v_Message "Starting Backfill request to the analysis service." -v_ConsoleOutput -v_LogLevel INFO
@@ -348,17 +361,24 @@ function Start-AFAnalysisRecalculation{
             throw "`$afAnalysisService.CanQueueCalculation() returned false : $reason"
         }
        
-        $BackfillStatus = Wait-EndOfBackfilling -AFAnalysisList $AFAnalysisList -AFTimeRange $AFTimeRange -RecalculationLogFilePath $RecalculationLogFilePath
+        if($AutomaticMode -eq $true) { $BackfillStatus = Wait-EndOfBackfilling -AFAnalysisList $AFAnalysisList -AFTimeRange $AFTimeRange -RecalculationLogFilePath $RecalculationLogFilePath }
+        if($AutomaticMode -eq $false ) { Read-Host "Pause - Validate backfilling is over." }
         if($false -eq $BackfillStatus) { throw "Backfill goes wrong for some analysis."}
     }
     catch {
         Write-Log -v_Message "Failed to backfill analysis: Line $($_.InvocationInfo.ScriptLineNumber) :: $_" -v_LogLevel "ERROR" -v_ConsoleOutput
     }
     finally{
-        # Stop the analysis
-        Write-Log -v_Message "Stopping all the analysis listed..." -v_ConsoleOutput -v_LogLevel INFO
-        [OSIsoft.AF.Analysis.AFAnalysis]::SetStatus($AFAnalysisList, [OSIsoft.AF.Analysis.AFStatus]::Disabled)
-        Write-Log -v_Message "Analysis successfully stopped." -v_ConsoleOutput -v_LogLevel INFO
+        if ($StartAndStopAnalysis){
+            # Stop the analysis
+            Write-Log -v_Message "Stopping all the analysis listed..." -v_ConsoleOutput -v_LogLevel INFO
+            [OSIsoft.AF.Analysis.AFAnalysis]::SetStatus($AFAnalysisList, [OSIsoft.AF.Analysis.AFStatus]::Disabled)
+            Write-Log -v_Message "Analysis successfully stopped." -v_ConsoleOutput -v_LogLevel INFO
+        }
+        else{
+            Write-Log -v_Message "The parameter 'StartAndStopAnalysis' is defined as 'false' - the script does not start/stop the analysis." -v_ConsoleOutput -v_LogLevel INFO
+        }
+        
     }
 }
 
@@ -372,7 +392,8 @@ function main {
         [int]$DeltaStartInMinutes,
         [int]$DeltaEndInMinutes,
         [System.Object[]]$CategoriesName,
-        [bool]$AutomaticMode
+        [bool]$AutomaticMode,
+        [bool]$StartAndStopAnalysis
     )
 
     # 00 : PREREQUISITES
@@ -392,7 +413,7 @@ function main {
         $AFAnalysisList = Get-AFAnalysisListByCategory -AFDatabase $AFDB -CategoryName $CategoryName
 
         # 04 : START THE ANALYSIS, BACKFILL, AND STOP THE ANALYSIS
-        Start-AFAnalysisRecalculation -AFDatabase $AFDB -AFAnalysisList $AFAnalysisList -AFTimeRange $AFTimeRangeToBackfill -RecalculationLogFilePath $RecalculationLogFilePath -CategoryName $CategoryName -AutomaticMode $AutomaticMode
+        Start-AFAnalysisRecalculation -AFDatabase $AFDB -AFAnalysisList $AFAnalysisList -AFTimeRange $AFTimeRangeToBackfill -RecalculationLogFilePath $RecalculationLogFilePath -CategoryName $CategoryName -AutomaticMode $AutomaticMode -StartAndStopAnalysis $StartAndStopAnalysis
     }
     
     # 05 : DISCONNECT FROM AF SERVER
@@ -402,4 +423,4 @@ function main {
 }
 
 # Launch main function
-main -afServerName $afServerName -afDBName $afDBName -InputCsvFilePathAndName $InputCsvFilePathAndName -afSDKPath $afSDKPath -DeltaStartInMinutes $DeltaStartInMinutes -DeltaEndInMinutes $DeltaEndInMinutes -RecalculationLogFilePath $RecalculationLogFilePath -CategoriesName $CategoriesName -AutomaticMode $AutomaticMode
+main -afServerName $afServerName -afDBName $afDBName -InputCsvFilePathAndName $InputCsvFilePathAndName -afSDKPath $afSDKPath -DeltaStartInMinutes $DeltaStartInMinutes -DeltaEndInMinutes $DeltaEndInMinutes -RecalculationLogFilePath $RecalculationLogFilePath -CategoriesName $CategoriesName -AutomaticMode $AutomaticMode -StartAndStopAnalysis $StartAndStopAnalysis
