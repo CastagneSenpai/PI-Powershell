@@ -13,10 +13,11 @@
     Date       : 23/10/2024
     Version    : 2.1
 
-Version 1.0 : Script start the analysis, user manually validate that the analysis are running ; Same for backfilling process.
-Version 1.1 : Script use categories to filter analysis to backfill, it can process multiple cycle (OEE before EF ...)
-Version 2.0 : Script detect automatically when the analysis are started, and when the backfill is finished using the analysis log file.
-Version 2.1 : User can choose to start/stop the analysis, or let them in start mode.
+    Version 1.0 : Script start the analysis, user manually validate that the analysis are running ; Same for backfilling process.
+    Version 1.1 : Script use categories to filter analysis to backfill, it can process multiple cycle (OEE before EF ...)
+    Version 2.0 : Script detect automatically when the analysis are started, and when the backfill is finished using the analysis log file.
+    Version 2.1 : User can choose to start/stop the analysis, or let them in start mode.
+    Version 2.2 : Task sent with .bat that specify all the parameters, default values not available anymore to keep one script.
 
 .PARAMETER afServerName
     The name of the PI AF server to connect to.
@@ -26,9 +27,6 @@ Version 2.1 : User can choose to start/stop the analysis, or let them in start m
 
 .PARAMETER afSDKPath
     Path to the OSIsoft AF SDK DLL.
-
-.PARAMETER InputCsvFilePathAndName
-    Path and filename for the input CSV file containing analysis details.
 
 .PARAMETER DeltaStartInMinutes
     Time range start offset in minutes from the current time (for backfill).
@@ -46,16 +44,15 @@ Version 2.1 : User can choose to start/stop the analysis, or let them in start m
 
 
 param(
-        [string]$afServerName = "ASEW1PSTEKPAF01.oxo.priv",
-        [string]$afDBName = "GBU SpP - ALL Plants",
-        [string]$afSDKPath = "D:\Applications\AVEVA\PIPC_x86\AF\PublicAssemblies\4.0\OSIsoft.AFSDK.dll",
-        [string]$RecalculationLogFilePath = "C:\ProgramData\OSIsoft\PIAnalysisNotifications\Data\Recalculation\recalculation-log.csv",
-        [string]$InputCsvFilePathAndName = (Join-path $PSScriptRoot "input.csv"),
-        [int]$DeltaStartInMinutes = 6000,	# 1500 = 25h
-        [int]$DeltaEndInMinutes = 5,		# 5 = 5min
-        [System.Object[]]$CategoriesName = @('Autobackfill_First', 'Autobackfill_Last'),
-        [bool]$AutomaticMode = $true,
-        [bool]$StartAndStopAnalysis = $true
+        [string]$afServerName,
+        [string]$afDBName,
+        [string]$afSDKPath,
+        [string]$RecalculationLogFilePath,
+        [int]$DeltaStartInMinutes,
+        [int]$DeltaEndInMinutes,
+        [string[]]$CategoriesName,
+        [bool]$AutomaticMode,
+        [bool]$StartAndStopAnalysis
 )
 
 # Log management function
@@ -267,7 +264,7 @@ function Wait-EndOfBackfilling{
     
                     # Case when status is Completed
                     if ($logLine.Status -in ("Completed", "PendingCompletion")) {
-                        Write-Log -v_Message "--- Backfilling of analysis $($AnalysisWithStatus.analysis.target)[$($AnalysisWithStatus.analysis.name)] completed." -v_LogLevel INFO -v_ConsoleOutput
+                        Write-Log -v_Message "--- Backfilling of analysis $($AnalysisWithStatus.analysis.target)[$($AnalysisWithStatus.analysis.name)] completed." -v_LogLevel DEBUG -v_ConsoleOutput
                         $AnalysisWithStatus.Status = "Completed"
                         break
                     }
@@ -328,10 +325,9 @@ function Start-AFAnalysisRecalculation{
                         write-log -v_Message "Pas de resultat sur la requete." -v_ConsoleOutput -v_LogLevel WARN 
                     }
                     foreach($result in $results){
-                        $guid = $result[0];
                         $name = $result[1];
                         $status = $result[2];
-                        Write-log -v_Message "Guid = $guid, Name = $name, Status = $status." -v_ConsoleOutput -v_LogLevel INFO
+                        Write-log -v_Message "Name = $name, Status = $status." -v_ConsoleOutput -v_LogLevel DEBUG
                     }
                     if (($results | ForEach-Object { $_[2] } | Where-Object { $_ -eq "Error" } | Measure-Object).Count -gt 0) {
                         Write-Log -v_Message "Some analysis listed in the input file are in error, please correct them or remove them from the list." -v_LogLevel ERROR -v_ConsoleOutput
@@ -345,7 +341,7 @@ function Start-AFAnalysisRecalculation{
             Write-Log -v_Message "Analysis successfully started." -v_ConsoleOutput -v_LogLevel INFO
         }
         else {
-            Write-Log -v_Message "The parameter 'StartAndStopAnalysis' is defined as 'false' - the script does not start/stop the analysis." -v_ConsoleOutput -v_LogLevel INFO
+            Write-Log -v_Message "The parameter 'StartAndStopAnalysis' is defined as 'false', analysis must be running." -v_ConsoleOutput -v_LogLevel INFO
         }
         
         
@@ -376,7 +372,7 @@ function Start-AFAnalysisRecalculation{
             Write-Log -v_Message "Analysis successfully stopped." -v_ConsoleOutput -v_LogLevel INFO
         }
         else{
-            Write-Log -v_Message "The parameter 'StartAndStopAnalysis' is defined as 'false' - the script does not start/stop the analysis." -v_ConsoleOutput -v_LogLevel INFO
+            Write-Log -v_Message "The parameter 'StartAndStopAnalysis' is defined as 'false', the script let the analysis running." -v_ConsoleOutput -v_LogLevel INFO
         }
         
     }
@@ -391,7 +387,7 @@ function main {
         [string]$RecalculationLogFilePath,
         [int]$DeltaStartInMinutes,
         [int]$DeltaEndInMinutes,
-        [System.Object[]]$CategoriesName,
+        [string[]]$CategoriesName,
         [bool]$AutomaticMode,
         [bool]$StartAndStopAnalysis
     )
@@ -399,9 +395,18 @@ function main {
     # 00 : PREREQUISITES
     Clear-Host
     Write-Log -v_Message "Script $(Split-Path -Path $MyInvocation.PSCommandPath -Leaf) started" -v_ConsoleOutput -v_LogLevel INFO
-    Import-AFSDK -AFSDKPath $afSDKPath
+    Write-Log -v_Message "--- Parameter afServerName = $afServerName" -v_LogLevel DEBUG -v_ConsoleOutput
+    Write-Log -v_Message "--- Parameter afDBName = $afDBName" -v_LogLevel DEBUG -v_ConsoleOutput
+    Write-Log -v_Message "--- Parameter afSDKPath = $afSDKPath" -v_LogLevel DEBUG -v_ConsoleOutput
+    Write-Log -v_Message "--- Parameter RecalculationLogFilePath = $RecalculationLogFilePath" -v_LogLevel DEBUG -v_ConsoleOutput
+    Write-Log -v_Message "--- Parameter DeltaStartInMinutes = $DeltaStartInMinutes" -v_LogLevel DEBUG -v_ConsoleOutput
+    Write-Log -v_Message "--- Parameter DeltaEndInMinutes = $DeltaEndInMinutes" -v_LogLevel DEBUG -v_ConsoleOutput
+    Write-Log -v_Message "--- Parameter CategoriesName = $CategoriesName" -v_LogLevel DEBUG -v_ConsoleOutput
+    Write-Log -v_Message "--- Parameter AutomaticMode = $AutomaticMode" -v_LogLevel DEBUG -v_ConsoleOutput
+    Write-Log -v_Message "--- Parameter StartAndStopAnalysis = $StartAndStopAnalysis" -v_LogLevel DEBUG -v_ConsoleOutput
     
     # 01 : CONNECTION TO PI AF AND DATABASE
+    Import-AFSDK -AFSDKPath $afSDKPath
     $AFDB = Connect-AFServer -afServerName $afServerName -afDBName $afDBName
 
     # 02 : CALCULATE THE TIME RANGE OF THE BACKFILL
@@ -409,11 +414,13 @@ function main {
 
     foreach($CategoryName in $CategoriesName)
     {
+        Write-Log -v_Message "Processing category <$CategoryName>. " -v_ConsoleOutput -v_LogLevel INFO
         # 03 : GET THE ANALYSIS BASED ON CATEGORY NAME
         $AFAnalysisList = Get-AFAnalysisListByCategory -AFDatabase $AFDB -CategoryName $CategoryName
 
         # 04 : START THE ANALYSIS, BACKFILL, AND STOP THE ANALYSIS
         Start-AFAnalysisRecalculation -AFDatabase $AFDB -AFAnalysisList $AFAnalysisList -AFTimeRange $AFTimeRangeToBackfill -RecalculationLogFilePath $RecalculationLogFilePath -CategoryName $CategoryName -AutomaticMode $AutomaticMode -StartAndStopAnalysis $StartAndStopAnalysis
+        Write-Log -v_Message "Category <$CategoryName> processed. " -v_ConsoleOutput -v_LogLevel INFO
     }
     
     # 05 : DISCONNECT FROM AF SERVER
@@ -423,4 +430,4 @@ function main {
 }
 
 # Launch main function
-main -afServerName $afServerName -afDBName $afDBName -InputCsvFilePathAndName $InputCsvFilePathAndName -afSDKPath $afSDKPath -DeltaStartInMinutes $DeltaStartInMinutes -DeltaEndInMinutes $DeltaEndInMinutes -RecalculationLogFilePath $RecalculationLogFilePath -CategoriesName $CategoriesName -AutomaticMode $AutomaticMode -StartAndStopAnalysis $StartAndStopAnalysis
+main -afServerName $afServerName -afDBName $afDBName -afSDKPath $afSDKPath -DeltaStartInMinutes $DeltaStartInMinutes -DeltaEndInMinutes $DeltaEndInMinutes -RecalculationLogFilePath $RecalculationLogFilePath -CategoriesName $CategoriesName -AutomaticMode $AutomaticMode -StartAndStopAnalysis $StartAndStopAnalysis
