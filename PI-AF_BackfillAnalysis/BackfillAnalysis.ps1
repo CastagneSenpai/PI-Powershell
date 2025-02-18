@@ -18,6 +18,7 @@
     Version 2.0 : Script detect automatically when the analysis are started, and when the backfill is finished using the analysis log file.
     Version 2.1 : User can choose to start/stop the analysis, or let them in start mode.
     Version 2.2 : Task sent with .bat that specify all the parameters, default values not available anymore to keep one script.
+    Version 2.3 : Use StartTime instead of EndTime to match the analysis log (for some EF, endTime <> logLine associated).
 
 .PARAMETER afServerName
     The name of the PI AF server to connect to.
@@ -237,7 +238,7 @@ function Wait-EndOfBackfilling{
         }
     }
  #   $AFTimeRangeConvertedToMatchLogFile = $AFTimeRange.StartTime.ToString("yyyy-MM-ddThh:00:00") + "--" + $AFTimeRange.EndTime.ToString("yyyy-MM-ddThh:00:00")
-    $AFTimeRangeConvertedToMatchLogFile = $AFTimeRange.EndTime.ToString("yyyy-MM-ddThh:00:00")
+    $AFTimeRangeConvertedToMatchLogFile = $AFTimeRange.StartTime.ToString("yyyy-MM-ddThh:00:00")
  
     # Loop to wait for backfilling to finish
     $nbTry=0
@@ -254,13 +255,13 @@ function Wait-EndOfBackfilling{
     
                 # Format the dates of the log file to compare with the sent AFTimeRange
                 $LogDateArray = $logLine.TimeRange -split '--'
-                # $LogDateDebut = (Get-Date $LogDateArray[0]).ToString("yyyy-MM-ddThh:00:00")
-                $LogDateFin = (Get-Date $LogDateArray[1]).ToString("yyyy-MM-ddThh:00:00")
+                $LogDateDebut = (Get-Date $LogDateArray[0]).ToString("yyyy-MM-ddThh:00:00")
+                # $LogDateFin = (Get-Date $LogDateArray[1]).ToString("yyyy-MM-ddThh:00:00")
                 # $LogLineTimeRangeFormatted = $LogDateDebut + "--" + $LogDateFin
     
                 # Check that the log corresponds to the analysis and the specified period
                 # if ($logLine.Id -eq $AnalysisWithStatus.Analysis.UniqueID -and $LogLineTimeRangeFormatted -eq $AFTimeRangeConvertedToMatchLogFile -and $logLine.Type -eq "Manual") {
-                if ($logLine.Id -eq $AnalysisWithStatus.Analysis.UniqueID -and $LogDateFin -eq $AFTimeRangeConvertedToMatchLogFile -and $logLine.Type -eq "Manual") {
+                if ($logLine.Id -eq $AnalysisWithStatus.Analysis.UniqueID -and $LogDateDebut -eq $AFTimeRangeConvertedToMatchLogFile -and $logLine.Type -eq "Manual") {
     
                     # Case when status is Completed
                     if ($logLine.Status -in ("Completed", "PendingCompletion")) {
@@ -279,10 +280,10 @@ function Wait-EndOfBackfilling{
         }
     
         # Pause before next check
-        Start-Sleep -Seconds 15
+        Start-Sleep -Seconds 10
         $nbTry++
     
-    } while ($AnalysisWithStatusList.Status -contains "InProgress" -and -not ($AnalysisWithStatusList.Status -contains "Error") -and $nbTry -ile 125)
+    } while ($AnalysisWithStatusList.Status -contains "InProgress" -and -not ($AnalysisWithStatusList.Status -contains "Error") -and $nbTry -ile 15)
     if ($AnalysisWithStatusList.Status -contains "Error") {
         return $false
     }
