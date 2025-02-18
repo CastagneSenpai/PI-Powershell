@@ -11,7 +11,6 @@
     Email      : romain.castagne-ext@syensqo.com
     Company    : CGI - SYENSQO
     Date       : 23/10/2024
-    Version    : 2.1
 
     Version 1.0 : Script start the analysis, user manually validate that the analysis are running ; Same for backfilling process.
     Version 1.1 : Script use categories to filter analysis to backfill, it can process multiple cycle (OEE before EF ...)
