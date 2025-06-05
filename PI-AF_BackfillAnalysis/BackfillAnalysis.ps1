@@ -48,6 +48,7 @@ param(
         [string]$afDBName,
         [string]$afSDKPath,
         [string]$RecalculationLogFilePath,
+        [string]$ConfigurationLogFilePath,
         [int]$DeltaStartInMinutes,
         [int]$DeltaEndInMinutes,
         [string[]]$CategoriesName,
@@ -299,6 +300,7 @@ function Start-AFAnalysisRecalculation{
         [OSIsoft.AF.Time.AFTimeRange] $AFTimeRange,
         [bool]$AutomaticMode,
         [string] $RecalculationLogFilePath,
+        [string]$ConfigurationLogFilePath,
         [string]$CategoryName,
         [bool]$StartAndStopAnalysis
     )
@@ -306,7 +308,7 @@ function Start-AFAnalysisRecalculation{
     $afAnalysisService = $AFDatabase.PISystem.AnalysisService
     try {  
         if($null -eq $AFAnalysisList){
-            throw "There is no AFAnalysis with the category Auto-Backfill to process."
+            throw "There is no AFAnalysis with the category $CategoryName to process."
         }
 
         # Start AF Analysis
@@ -337,7 +339,6 @@ function Start-AFAnalysisRecalculation{
                 }
                 While ($results -and -not ($results | ForEach-Object { $_[2] } | Where-Object { $_ -ne "Running" } | Measure-Object).Count -eq 0)
             }
-                
             Write-Log -v_Message "Analysis successfully started." -v_ConsoleOutput -v_LogLevel INFO
         }
         else {
@@ -356,8 +357,21 @@ function Start-AFAnalysisRecalculation{
             Write-Log -v_Message "Calculation cannot be started by the analysis service." -v_ConsoleOutput -v_LogLevel INFO
             throw "`$afAnalysisService.CanQueueCalculation() returned false : $reason"
         }
-       
-        if($AutomaticMode -eq $true) { $BackfillStatus = Wait-EndOfBackfilling -AFAnalysisList $AFAnalysisList -AFTimeRange $AFTimeRange -RecalculationLogFilePath $RecalculationLogFilePath }
+
+        if($AutomaticMode -eq $true) { 
+            # Check if Log TRACE is activated : if yes, do not check with the log file that backfill is completed
+            [xml]$xmlConfig = Get-Content -Path $ConfigurationLogFilePath
+            $loggerElement = $xmlConfig.configuration.nlog.rules.logger | Where-Object { $_.name -eq "*:Recalculation" }
+            if ($loggerElement.minlevel -eq "Trace") 
+            {
+                $BackfillStatus = $true
+                Start-Sleep -Seconds 180
+                Write-Log -v_Message "--- Error encountered in backfilling of analysis $($AnalysisWithStatus.analysis.target)[$($AnalysisWithStatus.analysis.name)] - Exiting." -v_LogLevel INFO -v_ConsoleOutput
+            }
+            else{ # Log Trace should be set to "INFO" if not "TRACE".
+                $BackfillStatus = Wait-EndOfBackfilling -AFAnalysisList $AFAnalysisList -AFTimeRange $AFTimeRange -RecalculationLogFilePath $RecalculationLogFilePath 
+            }
+        }
         if($AutomaticMode -eq $false ) { Read-Host "Pause - Validate backfilling is over." }
         if($false -eq $BackfillStatus) { throw "Backfill goes wrong for some analysis."}
     }
@@ -385,6 +399,7 @@ function main {
         [string]$afSDKPath,
         [string]$InputCsvFilePathAndName,
         [string]$RecalculationLogFilePath,
+        [string]$ConfigurationLogFilePath,
         [int]$DeltaStartInMinutes,
         [int]$DeltaEndInMinutes,
         [string[]]$CategoriesName,
@@ -399,6 +414,7 @@ function main {
     Write-Log -v_Message "--- Parameter afDBName = $afDBName" -v_LogLevel DEBUG -v_ConsoleOutput
     Write-Log -v_Message "--- Parameter afSDKPath = $afSDKPath" -v_LogLevel DEBUG -v_ConsoleOutput
     Write-Log -v_Message "--- Parameter RecalculationLogFilePath = $RecalculationLogFilePath" -v_LogLevel DEBUG -v_ConsoleOutput
+    Write-Log -v_Message "--- Parameter ConfigurationLogFilePath = $ConfigurationLogFilePath" -v_LogLevel DEBUG -v_ConsoleOutput
     Write-Log -v_Message "--- Parameter DeltaStartInMinutes = $DeltaStartInMinutes" -v_LogLevel DEBUG -v_ConsoleOutput
     Write-Log -v_Message "--- Parameter DeltaEndInMinutes = $DeltaEndInMinutes" -v_LogLevel DEBUG -v_ConsoleOutput
     Write-Log -v_Message "--- Parameter CategoriesName = $CategoriesName" -v_LogLevel DEBUG -v_ConsoleOutput
@@ -419,7 +435,7 @@ function main {
         $AFAnalysisList = Get-AFAnalysisListByCategory -AFDatabase $AFDB -CategoryName $CategoryName
 
         # 04 : START THE ANALYSIS, BACKFILL, AND STOP THE ANALYSIS
-        Start-AFAnalysisRecalculation -AFDatabase $AFDB -AFAnalysisList $AFAnalysisList -AFTimeRange $AFTimeRangeToBackfill -RecalculationLogFilePath $RecalculationLogFilePath -CategoryName $CategoryName -AutomaticMode $AutomaticMode -StartAndStopAnalysis $StartAndStopAnalysis
+        Start-AFAnalysisRecalculation -AFDatabase $AFDB -AFAnalysisList $AFAnalysisList -AFTimeRange $AFTimeRangeToBackfill -RecalculationLogFilePath $RecalculationLogFilePath -ConfigurationLogFilePath $ConfigurationLogFilePath -CategoryName $CategoryName -AutomaticMode $AutomaticMode -StartAndStopAnalysis $StartAndStopAnalysis
         Write-Log -v_Message "Category <$CategoryName> processed. " -v_ConsoleOutput -v_LogLevel INFO
     }
     
@@ -430,4 +446,4 @@ function main {
 }
 
 # Launch main function
-main -afServerName $afServerName -afDBName $afDBName -afSDKPath $afSDKPath -DeltaStartInMinutes $DeltaStartInMinutes -DeltaEndInMinutes $DeltaEndInMinutes -RecalculationLogFilePath $RecalculationLogFilePath -CategoriesName $CategoriesName -AutomaticMode $AutomaticMode -StartAndStopAnalysis $StartAndStopAnalysis
+main -afServerName $afServerName -afDBName $afDBName -afSDKPath $afSDKPath -DeltaStartInMinutes $DeltaStartInMinutes -DeltaEndInMinutes $DeltaEndInMinutes -RecalculationLogFilePath $RecalculationLogFilePath -ConfigurationLogFilePath $ConfigurationLogFilePath -CategoriesName $CategoriesName -AutomaticMode $AutomaticMode -StartAndStopAnalysis $StartAndStopAnalysis

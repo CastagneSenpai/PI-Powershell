@@ -102,6 +102,7 @@ function Update-TagData {
         $PIData = Get-PIValuesSafe -PIPoint $Point -StartTime $CurrentStartDate -EndTime $CurrentEndDate
         
         foreach ($CurrentData in $PIData) {
+            if(($null -eq $CurrentData.Value) -or ($CurrentData.Value -eq "")) {$CurrentData.Value = " "}
             if ($PIConnections["IsCollective"]) {
                 Add-PIValue -WriteMode "Replace" -Connection $PIConnections["Primary"] -PointName $Tag -Time $CurrentData.Timestamp -Value $CurrentData.Value -ErrorAction Stop | Out-Null
                 Add-PIValue -WriteMode "Replace" -Connection $PIConnections["Secondary"] -PointName $Tag -Time $CurrentData.Timestamp -Value $CurrentData.Value -ErrorAction Stop | Out-Null
