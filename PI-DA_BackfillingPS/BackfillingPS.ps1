@@ -21,8 +21,8 @@ Backfill the tags from a source server to a target server
 Title: BackfillingPS
 Author: Romain CASTAGNE <romain.castagne@external.total.com>
 Date v1 : 19/10/2022
-Date current version : 29/08/2024
-Version: 2.0
+Date v2 : 29/08/2024
+Version: 2.1 : 05/06/2025
 #>
 
 Param(
@@ -85,7 +85,7 @@ function Update-TagData {
         [double]$TotalTimeSpanInMinutes
     )
 
-    Write-Log -LogFile $LogPath -LogLevel INFO -Message "$Tag ($TagCounter/$TotalTags) - Tag processing ..."
+    Write-Log -LogLevel INFO -Message "$Tag ($TagCounter/$TotalTags) - Tag processing ..."
     $CurrentStartDate = $DateStartTime
     $Point = Get-PIpointSafe -TagName $Tag -PIConnection $PIConnections["Source"]
 
@@ -103,15 +103,15 @@ function Update-TagData {
         
         foreach ($CurrentData in $PIData) {
             if ($PIConnections["IsCollective"]) {
-                Set-PIValue -WriteMode "Replace" -Connection $PIConnections["Primary"] -PointName $Tag -Time $CurrentData.Timestamp -Value $CurrentData.Value -ErrorAction Stop | Out-Null
-                Set-PIValue -WriteMode "Replace" -Connection $PIConnections["Secondary"] -PointName $Tag -Time $CurrentData.Timestamp -Value $CurrentData.Value -ErrorAction Stop | Out-Null
+                Add-PIValue -WriteMode "Replace" -Connection $PIConnections["Primary"] -PointName $Tag -Time $CurrentData.Timestamp -Value $CurrentData.Value -ErrorAction Stop | Out-Null
+                Add-PIValue -WriteMode "Replace" -Connection $PIConnections["Secondary"] -PointName $Tag -Time $CurrentData.Timestamp -Value $CurrentData.Value -ErrorAction Stop | Out-Null
             } else {
-                Set-PIValue -WriteMode "Replace" -Connection $PIConnections["Target"] -PointName $Tag -Time $CurrentData.Timestamp -Value $CurrentData.Value -ErrorAction Stop | Out-Null
+                Add-PIValue -WriteMode "Replace" -Connection $PIConnections["Target"] -PointName $Tag -Time $CurrentData.Timestamp -Value $CurrentData.Value -ErrorAction Stop | Out-Null
             }
         }
         $CurrentStartDate = $CurrentEndDate
     }
-    Write-Log -LogFile $LogPath -LogLevel INFO -Message "$Tag ($TagCounter/$TotalTags) - Tag processing ..."
+    Write-Log -LogLevel INFO -Message "$Tag ($TagCounter/$TotalTags) - Tag processing ..."
 }
 
 # Main function to orchestrate the script
@@ -133,7 +133,7 @@ function Invoke-Backfill {
         Update-TagData -Tag $Point -DateStartTime $DateStartTime -DateEndTime $DateEndTime -TagCounter $TagCounter -PIConnections $PIConnections -TotalTags $TotalTags -LogPath $LogPath -TotalTimeSpanInMinutes $TotalTimeSpanInMinutes
     }
 
-    Write-Log -LogFile $LogPath -LogLevel INFO -Message "End of Backfilling."
+    Write-Log -LogLevel INFO -Message "End of Backfilling."
     Add-Type -AssemblyName System.Windows.Forms
     [System.Windows.Forms.MessageBox]::Show("End of Backfilling.", "PI-DA_Backfilling", 0, 64)
 }
